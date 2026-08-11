@@ -220,6 +220,22 @@ body.modal-open .mobile-bottom-nav {
   transform: rotate(45deg);
 }
 
+@media (max-width: 768px) {
+  .quick-input-overlay {
+    top: var(--quick-vv-top, 0px);
+    left: var(--quick-vv-left, 0px);
+    width: var(--quick-vv-width, 100vw);
+    height: var(--quick-vv-height, 100dvh);
+  }
+
+  .quick-input-card {
+    max-height: calc(var(--quick-vv-height, 100dvh) - 4px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 /* Desktop Modal Tweaks */
 @media (min-width: 769px) {
   .quick-input-overlay {
@@ -234,4 +250,3 @@ body.modal-open .mobile-bottom-nav {
     padding: 20px;
   }
 }
-
