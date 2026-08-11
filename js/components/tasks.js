@@ -116,15 +116,38 @@ window.TasksComponent = {
   },
 
   initKeyboardAdjustment() {
-    if (!window.visualViewport) return;
-    const adjustForKeyboard = () => {
-      if (!this.addTaskModal?.classList.contains('active')) return;
-      const viewport = window.visualViewport;
-      const keyboardHeight = window.innerHeight - viewport.height - viewport.offsetTop;
-      this.quickCard.style.marginBottom = keyboardHeight > 50 ? `${keyboardHeight}px` : '0px';
+    const queueSync = () => {
+      if (this.quickViewportFrame != null) cancelAnimationFrame(this.quickViewportFrame);
+      this.quickViewportFrame = requestAnimationFrame(() => {
+        this.quickViewportFrame = null;
+        this.syncQuickInputViewport();
+      });
     };
-    window.visualViewport.addEventListener('resize', adjustForKeyboard);
-    window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+    this.queueQuickInputViewportSync = queueSync;
+    window.visualViewport?.addEventListener('resize', queueSync);
+    window.visualViewport?.addEventListener('scroll', queueSync);
+    window.addEventListener('resize', queueSync);
+  },
+
+  syncQuickInputViewport() {
+    if (!this.addTaskModal?.classList.contains('active')) return;
+    const viewport = window.visualViewport;
+    const values = {
+      '--quick-vv-top': viewport?.offsetTop ?? 0,
+      '--quick-vv-left': viewport?.offsetLeft ?? 0,
+      '--quick-vv-width': viewport?.width ?? window.innerWidth,
+      '--quick-vv-height': viewport?.height ?? window.innerHeight
+    };
+    Object.entries(values).forEach(([property, value]) =>
+      this.addTaskModal.style.setProperty(property, `${Math.max(0, value)}px`)
+    );
+  },
+
+  resetQuickInputViewport() {
+    if (this.quickViewportFrame != null) cancelAnimationFrame(this.quickViewportFrame);
+    this.quickViewportFrame = null;
+    ['--quick-vv-top', '--quick-vv-left', '--quick-vv-width', '--quick-vv-height']
+      .forEach(property => this.addTaskModal?.style.removeProperty(property));
   },
 
   syncUIFromState() {
@@ -237,6 +260,7 @@ window.TasksComponent = {
     this.addTaskModal.classList.add('active');
     this.addTaskModal.setAttribute('aria-hidden', 'false');
     this.syncTaskModalBodyState();
+    this.syncQuickInputViewport();
     requestAnimationFrame(() => this.titleInput?.focus());
   },
 
@@ -245,7 +269,7 @@ window.TasksComponent = {
     this.closeTaskActionMenu(false);
     this.addTaskModal.classList.remove('active');
     this.addTaskModal.setAttribute('aria-hidden', 'true');
-    if (this.quickCard) this.quickCard.style.marginBottom = '0px';
+    this.resetQuickInputViewport();
     this.editingTaskId = null;
     this.titleInput.value = '';
     this.descInput.value = '';
