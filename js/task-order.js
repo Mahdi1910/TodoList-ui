@@ -23,6 +23,14 @@ window.TaskOrderMethods = {
   getRootOrderSnapshot() {
     return this.getRootTaskIds();
   },
+
+  syncRootSortOrders() {
+    this.getRootTaskIds().forEach((id, sortOrder) => {
+      const task = this.getTask?.(id) || this.tasks.find(item => item.id === id);
+      if (task) task.sortOrder = sortOrder;
+    });
+  },
+
   rebaseVisibleRootOrder(orderedVisibleIds = []) {
     const uniqueIds = [...new Set(orderedVisibleIds)];
     if (uniqueIds.length < 2) return false;
@@ -40,12 +48,14 @@ window.TaskOrderMethods = {
     slots.forEach((slot, index) => {
       this.tasks[slot] = orderedTasks[index];
     });
+    this.syncRootSortOrders();
     return true;
   },
 
   restoreRootOrderSnapshot(snapshot = []) {
     return this.rebaseVisibleRootOrder(snapshot);
   },
+
   moveVisibleRootRelative(taskId, referenceId, placement = 'after', visibleIds = []) {
     const ordered = [...new Set(visibleIds)].filter(id => id !== taskId);
     if (!referenceId) {
