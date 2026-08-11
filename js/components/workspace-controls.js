@@ -109,7 +109,7 @@ window.WorkspaceControls = {
     submenu.setAttribute('aria-hidden', 'false');
     trigger.setAttribute('aria-expanded', 'true');
     trigger.classList.add('submenu-open');
-    this.positionSubmenu(submenu, trigger);
+    this.positionSubmenu(submenu);
   },
 
   closeSubmenu() {
@@ -124,20 +124,16 @@ window.WorkspaceControls = {
     this.activeSubmenu = null;
   },
 
-  positionSubmenu(submenu, trigger) {
+  positionSubmenu(submenu) {
     const margin = 8;
     submenu.style.visibility = 'hidden';
     const menuRect = this.menu.getBoundingClientRect();
-    const triggerRect = trigger.getBoundingClientRect();
     const subRect = submenu.getBoundingClientRect();
-    let left = menuRect.left - subRect.width - 6;
-    if (left < margin) left = menuRect.right + 6;
+    let left = menuRect.right - subRect.width;
+    let top = menuRect.top;
     left = Math.min(Math.max(margin, left), window.innerWidth - subRect.width - margin);
-    const top = Math.min(
-      Math.max(margin, triggerRect.top),
-      window.innerHeight - subRect.height - margin
-    );
-    submenu.style.left = `${left}px`;
+    top = Math.min(Math.max(margin, top), window.innerHeight - subRect.height - margin);
+    submenu.style.left = `${Math.max(margin, left)}px`;
     submenu.style.top = `${Math.max(margin, top)}px`;
     submenu.style.visibility = '';
   },
@@ -145,8 +141,7 @@ window.WorkspaceControls = {
   repositionOpenSubmenu() {
     if (!this.activeSubmenu) return;
     const submenu = this.activeSubmenu === 'sort' ? this.sortMenu : this.groupMenu;
-    const trigger = this.activeSubmenu === 'sort' ? this.sortTrigger : this.groupTrigger;
-    if (submenu?.classList.contains('open')) this.positionSubmenu(submenu, trigger);
+    if (submenu?.classList.contains('open')) this.positionSubmenu(submenu);
   },
 
   handleMainMenuClick(e) {
