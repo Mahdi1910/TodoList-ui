@@ -3,7 +3,7 @@ window.WorkspaceControls = {
   sortDirection: 'asc',
   groupKey: 'none',
   viewType: 'list',
-  activeSubmenu: null,
+  settingsPanelOpen: false,
 
   init() {
     this.directionBtn = document.getElementById('btn-sort-direction');
@@ -21,24 +21,20 @@ window.WorkspaceControls = {
       e.stopPropagation();
       this.handleMainMenuClick(e);
     });
-    this.sortMenu.addEventListener('click', e => {
+    this.settingsPanel.addEventListener('click', e => {
       e.stopPropagation();
-      this.handleSubmenuClick('sort', e);
-    });
-    this.groupMenu.addEventListener('click', e => {
-      e.stopPropagation();
-      this.handleSubmenuClick('group', e);
+      this.handleSettingsPanelClick(e);
     });
     document.addEventListener('click', () => {
-      if (this.activeSubmenu) {
-        this.closeSubmenu();
+      if (this.settingsPanelOpen) {
+        this.closeSettingsPanel();
         return;
       }
       this.closeMenu();
     });
     document.addEventListener('keydown', e => this.handleMenuKeydown(e));
-    window.addEventListener('resize', () => this.repositionOpenSubmenu());
-    window.visualViewport?.addEventListener('resize', () => this.repositionOpenSubmenu());
+    window.addEventListener('resize', () => this.repositionSettingsPanel());
+    window.visualViewport?.addEventListener('resize', () => this.repositionSettingsPanel());
     this.syncUI();
   },
 
@@ -57,37 +53,51 @@ window.WorkspaceControls = {
         </button>
       </div>
       <div class="workspace-menu-divider"></div>
-      <button type="button" class="workspace-submenu-trigger" id="workspace-sort-trigger" data-workspace-submenu="sort" aria-haspopup="menu" aria-expanded="false">
-        <span class="workspace-menu-primary">Sort</span><span class="workspace-menu-current" id="workspace-sort-current">Custom</span><span class="workspace-menu-chevron" aria-hidden="true">›</span>
-      </button>
-      <button type="button" class="workspace-submenu-trigger" id="workspace-group-trigger" data-workspace-submenu="group" aria-haspopup="menu" aria-expanded="false">
-        <span class="workspace-menu-primary">Group</span><span class="workspace-menu-current" id="workspace-group-current">None</span><span class="workspace-menu-chevron" aria-hidden="true">›</span>
+      <button type="button" class="workspace-submenu-trigger" id="workspace-sort-group-trigger" aria-haspopup="dialog" aria-controls="workspace-sort-group-panel" aria-expanded="false">
+        <span class="workspace-menu-primary">Sort &amp; Group</span>
+        <span class="workspace-menu-chevron" aria-hidden="true">›</span>
       </button>`;
 
-    this.sortTrigger = this.menu.querySelector('#workspace-sort-trigger');
-    this.groupTrigger = this.menu.querySelector('#workspace-group-trigger');
-    this.sortCurrent = this.menu.querySelector('#workspace-sort-current');
-    this.groupCurrent = this.menu.querySelector('#workspace-group-current');
-    this.sortMenu = this.createSubmenu('workspace-sort-menu', [
-      ['custom', 'Custom'], ['dueDate', 'Due Date'], ['priority', 'Priority'], ['name', 'Name'], ['createdAt', 'Created Date']
-    ], 'sort');
-    this.groupMenu = this.createSubmenu('workspace-group-menu', [
-      ['none', 'None'], ['priority', 'Priority'], ['date', 'Date'], ['project', 'Project'], ['tag', 'Tag']
-    ], 'group');
+    this.settingsTrigger = this.menu.querySelector('#workspace-sort-group-trigger');
+    this.settingsPanel = this.createSortGroupPanel();
   },
 
-  createSubmenu(id, options, type) {
-    document.getElementById(id)?.remove();
-    const submenu = document.createElement('div');
-    submenu.id = id;
-    submenu.className = 'workspace-submenu';
-    submenu.setAttribute('role', 'menu');
-    submenu.setAttribute('aria-hidden', 'true');
-    submenu.innerHTML = options.map(([value, label]) =>
-      `<button type="button" data-${type}-key="${value}" role="menuitemradio" aria-checked="false">${label}</button>`
-    ).join('');
-    document.body.appendChild(submenu);
-    return submenu;
+  createSortGroupPanel() {
+    document.getElementById('workspace-sort-group-panel')?.remove();
+    const panel = document.createElement('div');
+    panel.id = 'workspace-sort-group-panel';
+    panel.className = 'workspace-settings-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Sort and group settings');
+    panel.setAttribute('aria-hidden', 'true');
+    panel.innerHTML = `
+      <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
+        <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
+        <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
+          ${this.optionChip('sort', 'custom', 'Custom')}
+          ${this.optionChip('sort', 'dueDate', 'Due Date')}
+          ${this.optionChip('sort', 'priority', 'Priority')}
+          ${this.optionChip('sort', 'name', 'Name')}
+          ${this.optionChip('sort', 'createdAt', 'Created Date')}
+        </div>
+      </section>
+      <div class="workspace-settings-divider"></div>
+      <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
+        <div class="workspace-settings-label" id="workspace-group-label">Group</div>
+        <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
+          ${this.optionChip('group', 'none', 'None')}
+          ${this.optionChip('group', 'priority', 'Priority')}
+          ${this.optionChip('group', 'date', 'Date')}
+          ${this.optionChip('group', 'project', 'Project')}
+          ${this.optionChip('group', 'tag', 'Tag')}
+        </div>
+      </section>`;
+    document.body.appendChild(panel);
+    return panel;
+  },
+
+  optionChip(type, value, label) {
+    return `<button type="button" class="workspace-option-chip" data-${type}-key="${value}" role="radio" aria-checked="false">${label}</button>`;
   },
 
   openMenu() {
@@ -100,95 +110,87 @@ window.WorkspaceControls = {
   },
 
   closeMenu() {
-    this.closeSubmenu();
+    this.closeSettingsPanel();
     this.menu?.classList.remove('open');
     this.menuBtn?.setAttribute('aria-expanded', 'false');
   },
 
-  openSubmenu(type) {
+  toggleSettingsPanel() {
+    this.settingsPanelOpen ? this.closeSettingsPanel() : this.openSettingsPanel();
+  },
+
+  openSettingsPanel() {
     if (!this.menu.classList.contains('open')) return;
-    this.closeSubmenu();
-    const submenu = type === 'sort' ? this.sortMenu : this.groupMenu;
-    const trigger = type === 'sort' ? this.sortTrigger : this.groupTrigger;
-    this.activeSubmenu = type;
-    submenu.classList.add('open');
-    submenu.setAttribute('aria-hidden', 'false');
-    trigger.setAttribute('aria-expanded', 'true');
-    trigger.classList.add('submenu-open');
-    this.positionSubmenu(submenu);
+    this.settingsPanelOpen = true;
+    this.settingsPanel.classList.add('open');
+    this.settingsPanel.setAttribute('aria-hidden', 'false');
+    this.settingsTrigger.setAttribute('aria-expanded', 'true');
+    this.settingsTrigger.classList.add('submenu-open');
+    this.syncUI();
+    this.positionSettingsPanel();
   },
 
-  closeSubmenu() {
-    [this.sortMenu, this.groupMenu].forEach(menu => {
-      menu?.classList.remove('open');
-      menu?.setAttribute('aria-hidden', 'true');
-    });
-    [this.sortTrigger, this.groupTrigger].forEach(trigger => {
-      trigger?.setAttribute('aria-expanded', 'false');
-      trigger?.classList.remove('submenu-open');
-    });
-    this.activeSubmenu = null;
+  closeSettingsPanel() {
+    this.settingsPanelOpen = false;
+    this.settingsPanel?.classList.remove('open');
+    this.settingsPanel?.setAttribute('aria-hidden', 'true');
+    this.settingsTrigger?.setAttribute('aria-expanded', 'false');
+    this.settingsTrigger?.classList.remove('submenu-open');
   },
 
-  positionSubmenu(submenu) {
+  positionSettingsPanel() {
+    if (!this.settingsPanelOpen) return;
     const margin = 8;
-    submenu.style.visibility = 'hidden';
+    this.settingsPanel.style.visibility = 'hidden';
     const menuRect = this.menu.getBoundingClientRect();
-    const subRect = submenu.getBoundingClientRect();
-    let left = menuRect.right - subRect.width;
+    const panelRect = this.settingsPanel.getBoundingClientRect();
+    let left = menuRect.right - panelRect.width;
     let top = menuRect.top;
-    left = Math.min(Math.max(margin, left), window.innerWidth - subRect.width - margin);
-    top = Math.min(Math.max(margin, top), window.innerHeight - subRect.height - margin);
-    submenu.style.left = `${Math.max(margin, left)}px`;
-    submenu.style.top = `${Math.max(margin, top)}px`;
-    submenu.style.visibility = '';
+    left = Math.min(Math.max(margin, left), window.innerWidth - panelRect.width - margin);
+    top = Math.min(Math.max(margin, top), window.innerHeight - panelRect.height - margin);
+    this.settingsPanel.style.left = `${Math.max(margin, left)}px`;
+    this.settingsPanel.style.top = `${Math.max(margin, top)}px`;
+    this.settingsPanel.style.visibility = '';
   },
 
-  repositionOpenSubmenu() {
-    if (!this.activeSubmenu) return;
-    const submenu = this.activeSubmenu === 'sort' ? this.sortMenu : this.groupMenu;
-    if (submenu?.classList.contains('open')) this.positionSubmenu(submenu);
+  repositionSettingsPanel() {
+    if (this.settingsPanelOpen) this.positionSettingsPanel();
   },
 
   handleMainMenuClick(e) {
-    const trigger = e.target.closest('[data-workspace-submenu]');
-    const viewItem = e.target.closest('[data-view-type]');
-    if (trigger) {
-      const type = trigger.dataset.workspaceSubmenu;
-      this.activeSubmenu === type ? this.closeSubmenu() : this.openSubmenu(type);
+    if (e.target.closest('#workspace-sort-group-trigger')) {
+      this.toggleSettingsPanel();
       return;
     }
+    const viewItem = e.target.closest('[data-view-type]');
     if (viewItem && !viewItem.disabled) {
-      this.closeSubmenu();
+      this.closeSettingsPanel();
       this.setViewType(viewItem.dataset.viewType, { persist: true, render: false });
       this.syncUI();
       window.TasksComponent?.render();
-      return;
     }
-    if (this.activeSubmenu) this.closeSubmenu();
   },
 
-  handleSubmenuClick(type, e) {
-    const item = e.target.closest(type === 'sort' ? '[data-sort-key]' : '[data-group-key]');
-    if (!item) return;
-    if (type === 'sort') this.sortKey = this.normalizeSortKey(item.dataset.sortKey);
-    else this.groupKey = item.dataset.groupKey;
+  handleSettingsPanelClick(e) {
+    const sortItem = e.target.closest('[data-sort-key]');
+    const groupItem = e.target.closest('[data-group-key]');
+    if (!sortItem && !groupItem) return;
+    if (sortItem) this.sortKey = this.normalizeSortKey(sortItem.dataset.sortKey);
+    if (groupItem) this.groupKey = groupItem.dataset.groupKey;
     this.syncUI();
     window.TasksComponent?.render();
-    this.closeSubmenu();
   },
 
   handleMenuKeydown(e) {
     if (e.key !== 'Escape' || !this.menu.classList.contains('open')) return;
     e.preventDefault();
-    if (this.activeSubmenu) {
-      const trigger = this.activeSubmenu === 'sort' ? this.sortTrigger : this.groupTrigger;
-      this.closeSubmenu();
-      trigger?.focus();
-    } else {
-      this.closeMenu();
-      this.menuBtn.focus();
+    if (this.settingsPanelOpen) {
+      this.closeSettingsPanel();
+      this.settingsTrigger?.focus();
+      return;
     }
+    this.closeMenu();
+    this.menuBtn.focus();
   },
 
   normalizeSortKey(sortKey) {
@@ -238,12 +240,12 @@ window.WorkspaceControls = {
 
   syncUI() {
     this.sortKey = this.normalizeSortKey(this.sortKey);
-    this.sortMenu?.querySelectorAll('[data-sort-key]').forEach(item => {
+    this.settingsPanel?.querySelectorAll('[data-sort-key]').forEach(item => {
       const selected = this.normalizeSortKey(item.dataset.sortKey) === this.sortKey;
       item.classList.toggle('selected', selected);
       item.setAttribute('aria-checked', selected ? 'true' : 'false');
     });
-    this.groupMenu?.querySelectorAll('[data-group-key]').forEach(item => {
+    this.settingsPanel?.querySelectorAll('[data-group-key]').forEach(item => {
       const selected = item.dataset.groupKey === this.groupKey;
       item.classList.toggle('selected', selected);
       item.setAttribute('aria-checked', selected ? 'true' : 'false');
@@ -253,10 +255,6 @@ window.WorkspaceControls = {
       item.classList.toggle('selected', selected);
       if (!item.disabled) item.setAttribute('aria-checked', selected ? 'true' : 'false');
     });
-    const sortLabels = { custom: 'Custom', dueDate: 'Due Date', priority: 'Priority', name: 'Name', createdAt: 'Created Date' };
-    const groupLabels = { none: 'None', priority: 'Priority', date: 'Date', project: 'Project', tag: 'Tag' };
-    if (this.sortCurrent) this.sortCurrent.textContent = sortLabels[this.sortKey] || 'Custom';
-    if (this.groupCurrent) this.groupCurrent.textContent = groupLabels[this.groupKey] || 'None';
 
     if (this.directionBtn) {
       const custom = this.sortKey === 'custom';
