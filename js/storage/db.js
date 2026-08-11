@@ -26,7 +26,10 @@ window.TodoDb = (() => {
       });
       openRequest.addEventListener('success', () => {
         const db = openRequest.result;
-        db.addEventListener('versionchange', () => db.close());
+        db.addEventListener('versionchange', () => {
+          db.close();
+          openPromise = null;
+        });
         resolve(db);
       }, { once: true });
       openRequest.addEventListener('error', () => {
@@ -50,9 +53,7 @@ window.TodoDb = (() => {
       await done;
       return result;
     } catch (error) {
-      if (tx.readyState !== 'done') {
-        try { tx.abort(); } catch (_) {}
-      }
+      try { tx.abort(); } catch (_) {}
       try { await done; } catch (_) {}
       throw error;
     }
