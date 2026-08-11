@@ -55,6 +55,8 @@ Object.assign(window.AppDataService, {
   deleteProject(projectId) {
     return this.enqueue(async () => {
       if (!window.AppState.getProject(projectId)) return false;
+      const childIds = new Set(window.AppState.projects.filter(item => item.parentId === projectId).map(item => item.id));
+      const affectedTaskIds = new Set(window.AppState.tasks.filter(item => item.project === projectId).map(item => item.id));
       const S = window.TodoDbSchema.STORES;
       const now = window.TodoStorageMappers.nowIso();
       await window.TodoDb.withTransaction([S.PROJECTS, S.TASKS], 'readwrite', async tx => {
@@ -65,8 +67,8 @@ Object.assign(window.AppDataService, {
         await window.TodoRepositories.remove(tx, S.PROJECTS, projectId);
       });
       window.AppState.deleteProject(projectId);
-      window.AppState.projects.forEach(item => { if (item.parentId === projectId) item.updatedAt = now; });
-      window.AppState.tasks.forEach(item => { if (!item.project) item.updatedAt = item.updatedAt || now; });
+      window.AppState.projects.forEach(item => { if (childIds.has(item.id)) item.updatedAt = now; });
+      window.AppState.tasks.forEach(item => { if (affectedTaskIds.has(item.id)) item.updatedAt = now; });
       return true;
     });
   },
@@ -122,6 +124,7 @@ Object.assign(window.AppDataService, {
   deleteTag(tagId) {
     return this.enqueue(async () => {
       if (!window.AppState.getTag(tagId)) return false;
+      const childIds = new Set(window.AppState.tags.filter(item => item.parentId === tagId).map(item => item.id));
       const S = window.TodoDbSchema.STORES;
       const now = window.TodoStorageMappers.nowIso();
       await window.TodoDb.withTransaction([S.TAGS, S.TASK_TAGS], 'readwrite', async tx => {
@@ -131,6 +134,7 @@ Object.assign(window.AppDataService, {
         await window.TodoRepositories.remove(tx, S.TAGS, tagId);
       });
       window.AppState.deleteTag(tagId);
+      window.AppState.tags.forEach(item => { if (childIds.has(item.id)) item.updatedAt = now; });
       return true;
     });
   },
@@ -166,16 +170,19 @@ Object.assign(window.AppDataService, {
   deleteReminderDefinition(reminderId) {
     return this.enqueue(async () => {
       const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction([S.REMINDER_DEFINITIONS, S.TASK_REMINDERS], 'readwrite', async tx => {
+      const deleted = await window.TodoDb.withTransaction([S.REMINDER_DEFINITIONS, S.TASK_REMINDERS], 'readwrite', async tx => {
         const definition = await window.TodoRepositories.get(tx, S.REMINDER_DEFINITIONS, reminderId);
-        if (!definition || definition.isBuiltin) return;
+        if (!definition || definition.isBuiltin) return false;
         await window.TodoRepositories.deleteByIndex(tx, S.TASK_REMINDERS, 'by_reminder_id', reminderId);
         await window.TodoRepositories.remove(tx, S.REMINDER_DEFINITIONS, reminderId);
+        return true;
       });
+      if (!deleted) return false;
       window.AppState.tasks.forEach(task => {
         task.reminders = (task.reminders || []).filter(id => id !== reminderId);
         if (!task.reminders.length) task.reminders = ['none'];
       });
+      return true;
     });
   }
 });
