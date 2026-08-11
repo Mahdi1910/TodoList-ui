@@ -127,7 +127,9 @@
 .workspace-submenu {
   position: fixed;
   z-index: 90;
-  min-width: 170px;
+  width: max-content;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
   display: none;
   padding: 6px;
 }
@@ -147,6 +149,7 @@
   color: var(--text-primary);
   font-size: 13px;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
