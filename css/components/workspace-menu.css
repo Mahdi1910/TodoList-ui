@@ -127,7 +127,7 @@
 .workspace-submenu {
   position: fixed;
   z-index: 90;
-  width: max-content;
+  width: fit-content;
   min-width: 0;
   max-width: calc(100vw - 16px);
   display: none;
@@ -135,11 +135,13 @@
 }
 
 .workspace-submenu.open {
-  display: block;
+  display: grid;
+  grid-template-columns: max-content;
 }
 
 .workspace-submenu button {
-  width: 100%;
+  width: auto;
+  min-width: 0;
   min-height: 36px;
   padding: 8px 30px 8px 10px;
   position: relative;
