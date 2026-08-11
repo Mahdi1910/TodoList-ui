@@ -1,49 +1,49 @@
+(() => {
+  const seedTime = new Date().toISOString();
+  window.AppSeedData = {
+    projects: [
+      { id: 'personal', name: 'Personal', icon: '●', viewType: 'list', parentId: null },
+      { id: 'work', name: 'Work', icon: '◆', viewType: 'list', parentId: null }
+    ],
+    tags: [
+      { id: 'urgent', name: 'Urgent', icon: '!', viewType: 'list', parentId: null },
+      { id: 'design', name: 'Design', icon: '◆', viewType: 'list', parentId: null },
+      { id: 'personal', name: 'Personal', icon: '●', viewType: 'list', parentId: null },
+      { id: 'work', name: 'Work', icon: '◆', viewType: 'list', parentId: null }
+    ],
+    tasks: [
+      {
+        id: 'task-1', title: 'Design Apple-style UI layout for Todo app', description: '',
+        project: 'personal', priority: 'high', tags: ['design'], completed: false, createdAt: seedTime
+      },
+      {
+        id: 'task-2', title: 'Setup modular CSS variables and dark/light themes', description: '',
+        project: 'work', priority: 'medium', tags: ['urgent'], completed: true, createdAt: seedTime
+      }
+    ]
+  };
+})();
+
 window.AppState = {
   theme: 'dark',
   isSidebarCollapsed: false,
   currentFilter: 'inbox',
   currentFilterType: 'smart',
+  projects: [],
+  tags: [],
+  tasks: [],
+  settings: { sortKey: 'custom', sortDirection: 'asc', groupKey: 'none' },
 
-  projects: [
-    { id: 'personal', name: 'Personal', icon: '●', viewType: 'list', parentId: null },
-    { id: 'work', name: 'Work', icon: '◆', viewType: 'list', parentId: null }
-  ],
-
-  tags: [
-    { id: 'urgent', name: 'Urgent', icon: '!', viewType: 'list', parentId: null },
-    { id: 'design', name: 'Design', icon: '◆', viewType: 'list', parentId: null },
-    { id: 'personal', name: 'Personal', icon: '●', viewType: 'list', parentId: null },
-    { id: 'work', name: 'Work', icon: '◆', viewType: 'list', parentId: null }
-  ],
-
-  tasks: [
-    {
-      id: 'task-1',
-      title: 'Design Apple-style UI layout for Todo app',
-      description: '',
-      project: 'personal',
-      priority: 'high',
-      tags: ['design'],
-      completed: false,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'task-2',
-      title: 'Setup modular CSS variables and dark/light themes',
-      description: '',
-      project: 'work',
-      priority: 'medium',
-      tags: ['urgent'],
-      completed: true,
-      createdAt: new Date().toISOString()
-    }
-  ],
+  hydrate({ projects = [], tags = [], tasks = [], settings = {} } = {}) {
+    this.projects = projects.map(item => ({ ...item }));
+    this.tags = tags.map(item => ({ ...item }));
+    this.tasks = tasks.map(task => this.normalizeTask(task));
+    this.settings = { sortKey: 'custom', sortDirection: 'asc', groupKey: 'none', ...settings };
+    this.rebuildTaskOrder();
+  },
 
   normalizeTask(task) {
-    const legacyTags = Array.isArray(task.tags)
-      ? task.tags
-      : (task.tag ? String(task.tag).split(',') : []);
-
+    const legacyTags = Array.isArray(task.tags) ? task.tags : (task.tag ? String(task.tag).split(',') : []);
     return {
       ...task,
       description: typeof task.description === 'string' ? task.description : '',
@@ -54,7 +54,10 @@ window.AppState = {
       priority: ['low', 'medium', 'high'].includes(task.priority) ? task.priority : '',
       parentTaskId: typeof task.parentTaskId === 'string' && task.parentTaskId ? task.parentTaskId : null,
       project: typeof task.project === 'string' ? task.project : '',
-      tags: [...new Set(legacyTags.map(tag => String(tag).toLowerCase().trim()).filter(Boolean))]
+      tags: [...new Set(legacyTags.map(tag => String(tag).toLowerCase().trim()).filter(Boolean))],
+      sortOrder: Number.isFinite(task.sortOrder) ? task.sortOrder : 0,
+      createdAt: task.createdAt || new Date().toISOString(),
+      updatedAt: task.updatedAt || task.createdAt || new Date().toISOString()
     };
   },
 
@@ -62,13 +65,30 @@ window.AppState = {
     this.tasks = this.tasks.map(task => this.normalizeTask(task));
   },
 
+  rebuildTaskOrder() {
+    const compare = (a, b) => (a.sortOrder - b.sortOrder) || String(a.createdAt).localeCompare(String(b.createdAt));
+    const roots = this.tasks.filter(task => !task.parentTaskId).sort(compare);
+    const children = new Map();
+    this.tasks.filter(task => task.parentTaskId).forEach(task => {
+      if (!children.has(task.parentTaskId)) children.set(task.parentTaskId, []);
+      children.get(task.parentTaskId).push(task);
+    });
+    children.forEach(items => items.sort(compare));
+    const ordered = [];
+    roots.forEach(root => ordered.push(root, ...(children.get(root.id) || [])));
+    const included = new Set(ordered.map(task => task.id));
+    this.tasks.filter(task => !included.has(task.id)).sort(compare).forEach(task => ordered.push(task));
+    this.tasks = ordered;
+    return this.tasks;
+  },
+
   addProject(projectData) {
     const project = {
-      id: `project-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: projectData.name.trim(),
-      icon: projectData.icon || '●',
-      viewType: projectData.viewType || 'list',
-      parentId: projectData.parentId || null
+      id: this.createId('project'), name: projectData.name.trim(), icon: projectData.icon || '●',
+      viewType: projectData.viewType || 'list', parentId: projectData.parentId || null,
+      sortOrder: Number.isFinite(projectData.sortOrder) ? projectData.sortOrder : this.projects.length,
+      createdAt: projectData.createdAt || new Date().toISOString(),
+      updatedAt: projectData.updatedAt || new Date().toISOString()
     };
     this.projects.push(project);
     return project;
@@ -81,6 +101,7 @@ window.AppState = {
     project.icon = projectData.icon || '●';
     project.viewType = projectData.viewType || 'list';
     project.parentId = projectData.parentId || null;
+    project.updatedAt = projectData.updatedAt || new Date().toISOString();
     return project;
   },
 
@@ -96,15 +117,12 @@ window.AppState = {
     return childIds;
   },
 
-  getProject(projectId) {
-    return this.projects.find(project => project.id === projectId) || null;
-  },
+  getProject(projectId) { return this.projects.find(project => project.id === projectId) || null; },
 
   getProjectDescendantIds(projectId) {
     const ids = [];
     const walk = parentId => this.projects.filter(project => project.parentId === parentId).forEach(child => {
-      ids.push(child.id);
-      walk(child.id);
+      ids.push(child.id); walk(child.id);
     });
     walk(projectId);
     return ids;
@@ -121,11 +139,11 @@ window.AppState = {
 
   addTag(tagData) {
     const tag = {
-      id: `tag-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: tagData.name.trim(),
-      icon: tagData.icon || '●',
-      viewType: tagData.viewType || 'list',
-      parentId: tagData.parentId || null
+      id: this.createId('tag'), name: tagData.name.trim(), icon: tagData.icon || '●',
+      viewType: tagData.viewType || 'list', parentId: tagData.parentId || null,
+      sortOrder: Number.isFinite(tagData.sortOrder) ? tagData.sortOrder : this.tags.length,
+      createdAt: tagData.createdAt || new Date().toISOString(),
+      updatedAt: tagData.updatedAt || new Date().toISOString()
     };
     this.tags.push(tag);
     return tag;
@@ -138,44 +156,33 @@ window.AppState = {
     tag.icon = tagData.icon || '●';
     tag.viewType = tagData.viewType || 'list';
     tag.parentId = tagData.parentId || null;
+    tag.updatedAt = tagData.updatedAt || new Date().toISOString();
     return tag;
   },
 
   deleteTag(tagId) {
     const childIds = this.tags.filter(tag => tag.parentId === tagId).map(tag => tag.id);
     this.tags = this.tags.filter(tag => tag.id !== tagId);
-    this.tags.forEach(tag => {
-      if (tag.parentId === tagId) tag.parentId = null;
-    });
-    this.tasks.forEach(task => {
-      task.tags = this.normalizeTask(task).tags.filter(id => id !== tagId);
-    });
+    this.tags.forEach(tag => { if (tag.parentId === tagId) tag.parentId = null; });
+    this.tasks.forEach(task => { task.tags = this.normalizeTask(task).tags.filter(id => id !== tagId); });
     if (this.currentFilterType === 'tag' && this.currentFilter === tagId) {
-      this.currentFilter = 'inbox';
-      this.currentFilterType = 'smart';
+      this.currentFilter = 'inbox'; this.currentFilterType = 'smart';
     }
     return childIds;
   },
 
-  getTag(tagId) {
-    return this.tags.find(tag => tag.id === tagId) || null;
-  },
+  getTag(tagId) { return this.tags.find(tag => tag.id === tagId) || null; },
 
   getTagDescendantIds(tagId) {
     const ids = [];
-    const walk = parentId => {
-      this.tags.filter(tag => tag.parentId === parentId).forEach(child => {
-        ids.push(child.id);
-        walk(child.id);
-      });
-    };
+    const walk = parentId => this.tags.filter(tag => tag.parentId === parentId).forEach(child => {
+      ids.push(child.id); walk(child.id);
+    });
     walk(tagId);
     return ids;
   },
 
-  getTagTreeTaskIds(tagId) {
-    return [tagId, ...this.getTagDescendantIds(tagId)];
-  },
+  getTagTreeTaskIds(tagId) { return [tagId, ...this.getTagDescendantIds(tagId)]; },
 
   isTagDescendant(tagId, possibleAncestorId) {
     let current = this.getTag(tagId);
@@ -186,62 +193,56 @@ window.AppState = {
     return false;
   },
 
+  createId(prefix) {
+    const value = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${value}`;
+  },
+
   addTask(taskData) {
-    const newTask = {
-      id: typeof crypto !== 'undefined' && crypto.randomUUID
-        ? `task-${crypto.randomUUID()}`
-        : `task-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      title: taskData.title,
-      description: taskData.description || '',
-      dueDate: taskData.dueDate || null,
-      dueTime: taskData.dueTime || null,
-      reminders: Array.isArray(taskData.reminders) ? [...taskData.reminders] : [],
-      repeat: taskData.repeat || null,
-      parentTaskId: typeof taskData.parentTaskId === 'string' && taskData.parentTaskId ? taskData.parentTaskId : null,
-      project: typeof taskData.project === 'string' ? taskData.project : '',
-      priority: ['low', 'medium', 'high'].includes(taskData.priority) ? taskData.priority : '',
-      tags: Array.isArray(taskData.tags) ? [...taskData.tags] : [],
-      completed: false,
-      createdAt: new Date().toISOString()
-    };
-    this.tasks.unshift(newTask);
+    const now = new Date().toISOString();
+    const newTask = this.normalizeTask({
+      id: this.createId('task'), title: taskData.title, description: taskData.description || '',
+      dueDate: taskData.dueDate || null, dueTime: taskData.dueTime || null,
+      reminders: Array.isArray(taskData.reminders) ? [...taskData.reminders] : [], repeat: taskData.repeat || null,
+      parentTaskId: taskData.parentTaskId || null, project: taskData.project || '', priority: taskData.priority || '',
+      tags: Array.isArray(taskData.tags) ? [...taskData.tags] : [], completed: false,
+      sortOrder: Number.isFinite(taskData.sortOrder) ? taskData.sortOrder : 0,
+      createdAt: taskData.createdAt || now, updatedAt: taskData.updatedAt || now
+    });
+    this.tasks.push(newTask);
+    this.rebuildTaskOrder();
     return newTask;
   },
 
   updateTask(taskId, updatedData) {
     const index = this.tasks.findIndex(t => t.id === taskId);
     if (index === -1) return null;
-
     const existingTask = this.tasks[index];
     const updatedTask = this.normalizeTask({
-      ...existingTask,
-      ...updatedData,
-      id: existingTask.id, // Preserve immutable properties
-      completed: existingTask.completed,
-      createdAt: existingTask.createdAt
+      ...existingTask, ...updatedData, id: existingTask.id, completed: existingTask.completed,
+      createdAt: existingTask.createdAt, sortOrder: existingTask.sortOrder,
+      updatedAt: updatedData.updatedAt || new Date().toISOString()
     });
-
     this.tasks[index] = updatedTask;
     return updatedTask;
   },
+
   toggleTaskStatus(taskId) {
     const task = this.tasks.find(t => t.id === taskId);
-    if (task) task.completed = !task.completed;
+    if (task) { task.completed = !task.completed; task.updatedAt = new Date().toISOString(); }
     return task;
   },
 
-  deleteTask(taskId) {
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-  },
+  deleteTask(taskId) { this.tasks = this.tasks.filter(t => t.id !== taskId); },
 
   matchesFilter(task) {
     if (this.currentFilterType === 'project') {
-      const visibleProjectIds = [this.currentFilter, ...this.getProjectDescendantIds(this.currentFilter)];
-      return visibleProjectIds.includes(task.project);
+      return [this.currentFilter, ...this.getProjectDescendantIds(this.currentFilter)].includes(task.project);
     }
     if (this.currentFilterType === 'tag') {
-      const visibleTagIds = this.getTagTreeTaskIds(this.currentFilter);
-      return this.normalizeTask(task).tags.some(tagId => visibleTagIds.includes(tagId));
+      const ids = this.getTagTreeTaskIds(this.currentFilter);
+      return this.normalizeTask(task).tags.some(tagId => ids.includes(tagId));
     }
     if (this.currentFilter === 'completed') return task.completed;
     if (this.currentFilter === 'today') return this.isTodayDate(task.dueDate);
@@ -254,44 +255,19 @@ window.AppState = {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   },
 
-  isTodayDate(dateStr) {
-    return typeof dateStr === 'string' && dateStr === this.getTodayDateStr();
-  },
-
-  getFilteredTasks() {
-    this.normalizeAllTasks();
-    return this.tasks.filter(task => this.matchesFilter(task));
-  },
-
-  getActiveTasks() {
-    return this.tasks.filter(t => !t.completed);
-  },
-
-  getCompletedTasks() {
-    return this.tasks.filter(t => t.completed);
-  },
-
-  countInbox() {
-    return this.tasks.filter(t => !t.completed && !t.project).length;
-  },
-
-  countToday() {
-    return this.tasks.filter(t => !t.completed && this.isTodayDate(t.dueDate)).length;
-  },
-
-  countCompleted() {
-    return this.tasks.filter(t => t.completed).length;
-  },
-
+  isTodayDate(dateStr) { return typeof dateStr === 'string' && dateStr === this.getTodayDateStr(); },
+  getFilteredTasks() { this.normalizeAllTasks(); return this.tasks.filter(task => this.matchesFilter(task)); },
+  getActiveTasks() { return this.tasks.filter(t => !t.completed); },
+  getCompletedTasks() { return this.tasks.filter(t => t.completed); },
+  countInbox() { return this.tasks.filter(t => !t.completed && !t.project).length; },
+  countToday() { return this.tasks.filter(t => !t.completed && this.isTodayDate(t.dueDate)).length; },
+  countCompleted() { return this.tasks.filter(t => t.completed).length; },
   countProject(project) {
-    const visibleProjectIds = [project, ...this.getProjectDescendantIds(project)];
-    return this.tasks.filter(t => !t.completed && visibleProjectIds.includes(t.project)).length;
+    const ids = [project, ...this.getProjectDescendantIds(project)];
+    return this.tasks.filter(t => !t.completed && ids.includes(t.project)).length;
   },
-
   countTag(tag) {
-    const visibleTagIds = this.getTagTreeTaskIds(tag);
-    return this.tasks.filter(t => !t.completed && this.normalizeTask(t).tags.some(tagId => visibleTagIds.includes(tagId))).length;
+    const ids = this.getTagTreeTaskIds(tag);
+    return this.tasks.filter(t => !t.completed && this.normalizeTask(t).tags.some(tagId => ids.includes(tagId))).length;
   }
 };
-
-window.AppState.normalizeAllTasks();
