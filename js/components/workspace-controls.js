@@ -29,7 +29,13 @@ window.WorkspaceControls = {
       e.stopPropagation();
       this.handleSubmenuClick('group', e);
     });
-    document.addEventListener('click', () => this.closeMenu());
+    document.addEventListener('click', () => {
+      if (this.activeSubmenu) {
+        this.closeSubmenu();
+        return;
+      }
+      this.closeMenu();
+    });
     document.addEventListener('keydown', e => this.handleMenuKeydown(e));
     window.addEventListener('resize', () => this.repositionOpenSubmenu());
     window.visualViewport?.addEventListener('resize', () => this.repositionOpenSubmenu());
