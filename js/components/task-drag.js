@@ -2,6 +2,7 @@ window.TaskDragMethods = {
   initTaskDrag() {
     this.dragWorkspace = document.querySelector('.workspace-content');
     if (!this.dragWorkspace) return;
+    this.assertTaskDragHierarchyIntegration();
     this.dragLayer = document.createElement('div');
     this.dragLayer.className = 'task-drag-layer';
     document.body.appendChild(this.dragLayer);
@@ -29,6 +30,22 @@ window.TaskDragMethods = {
       if (this.dragPending || this.touchDragPending || this.dragSession) e.preventDefault();
     });
     this.initTaskTouchDrag?.();
+  },
+
+  assertTaskDragHierarchyIntegration() {
+    const required = [
+      'resolveHierarchyDrop',
+      'measureHierarchyAlignment',
+      'buildInitialHierarchyPreview',
+      'applyHierarchyPreview',
+      'resolveRootSlot',
+      'resolveChildSlot',
+      'updateHorizontalIntent'
+    ];
+    const missing = required.filter(name => typeof this[name] !== 'function');
+    if (missing.length) {
+      throw new Error(`Task hierarchy drag integration is incomplete: ${missing.join(', ')}`);
+    }
   },
 
   setDropLaneContext(element, lane, groupType = 'none', groupKey = 'all') {
@@ -68,7 +85,7 @@ window.TaskDragMethods = {
     }
 
     const family = target.closest('.task-family');
-    const rootCard = this.getRootCard?.(family) || family?.querySelector(':scope > .task-card:not(.subtask-card)');
+    const rootCard = this.getRootCard(family);
     const sourceLane = family?.closest('[data-task-drop-lane]');
     if (!family || !rootCard || !rootCard.contains(target) || !sourceLane) return null;
     const task = window.AppState.getTask(family.dataset.parentId);
@@ -133,18 +150,8 @@ window.TaskDragMethods = {
     window.SubtaskEditorComponent?.closeMenus();
 
     const rect = pending.unit.getBoundingClientRect();
-    const alignment = this.measureHierarchyAlignment?.(sourceLane, pending.sourceFamily) || {
-      rootX: rect.left,
-      childX: rect.left,
-      indent: 0
-    };
-    const initialPreview = this.buildInitialHierarchyPreview?.(pending) || {
-      level: pending.level,
-      parentId: pending.parentId || null,
-      beforeTaskId: null,
-      afterTaskId: null,
-      forced: false
-    };
+    const alignment = this.measureHierarchyAlignment(sourceLane, pending.sourceFamily);
+    const initialPreview = this.buildInitialHierarchyPreview(pending);
 
     const placeholder = document.createElement('div');
     placeholder.className = `task-drop-placeholder ${pending.level === 'subtask' ? 'is-subtask-preview' : 'is-root-preview'}`;
@@ -230,7 +237,7 @@ window.TaskDragMethods = {
   },
 
   updateTaskDropTarget(x, y) {
-    this.resolveHierarchyDrop?.(x, y);
+    this.resolveHierarchyDrop(x, y);
   },
 
   captureDragFamilyRects(containers) {
