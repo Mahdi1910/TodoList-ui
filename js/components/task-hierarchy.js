@@ -19,15 +19,24 @@ window.TaskHierarchyMethods = {
       subtaskListId: listId
     }));
 
-    if (children.length) {
-      const list = document.createElement('div');
-      list.className = 'subtask-list';
-      list.id = listId;
-      list.hidden = this.isParentCollapsed(parent.id);
-      children.forEach(child => list.appendChild(this.createTaskCard(child, { isSubtask: true })));
-      family.appendChild(list);
-    }
+    const list = document.createElement('div');
+    list.className = 'subtask-list';
+    list.id = listId;
+    list.dataset.subtaskParentId = parent.id;
+    list.hidden = children.length > 0 && this.isParentCollapsed(parent.id);
+    children.forEach(child => list.appendChild(this.createSubtaskDragItem(child, parent.id)));
+    family.appendChild(list);
     return family;
+  },
+
+  createSubtaskDragItem(task, parentTaskId) {
+    const item = document.createElement('div');
+    item.className = 'subtask-drag-item';
+    item.dataset.taskId = task.id;
+    item.dataset.parentTaskId = parentTaskId;
+    item.dataset.dragSubtask = 'true';
+    item.appendChild(this.createTaskCard(task, { isSubtask: true }));
+    return item;
   },
 
   createSubtaskExpander(parentTask, listId) {
@@ -63,7 +72,7 @@ window.TaskHierarchyMethods = {
     const collapsed = this.isParentCollapsed(parentTaskId);
     document.querySelectorAll('.task-family').forEach(family => {
       if (family.dataset.parentId !== parentTaskId) return;
-      const list = family.querySelector('.subtask-list');
+      const list = family.querySelector(':scope > .subtask-list');
       const button = family.querySelector('[data-task-expander]');
       if (list) list.hidden = collapsed;
       if (button) {
