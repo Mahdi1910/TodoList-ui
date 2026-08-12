@@ -11,6 +11,29 @@ window.TaskOrderMethods = {
     return this.tasks.filter(task => !task.parentTaskId).map(task => task.id);
   },
 
+  getSiblingTasks(parentTaskId = null) {
+    const parentId = parentTaskId || null;
+    return this.tasks
+      .filter(task => (task.parentTaskId || null) === parentId)
+      .sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.createdAt).localeCompare(String(b.createdAt)));
+  },
+
+  getSiblingTaskIds(parentTaskId = null) {
+    return this.getSiblingTasks(parentTaskId).map(task => task.id);
+  },
+
+  resequenceTaskScope(parentTaskId = null, orderedIds = []) {
+    const parentId = parentTaskId || null;
+    const uniqueIds = [...new Set(orderedIds)];
+    uniqueIds.forEach((id, sortOrder) => {
+      const task = this.getTask?.(id) || this.tasks.find(item => item.id === id);
+      if (!task || (task.parentTaskId || null) !== parentId) return;
+      task.sortOrder = sortOrder;
+    });
+    this.rebuildTaskOrder?.();
+    return uniqueIds;
+  },
+
   getVisibleRootIds(tasks = []) {
     const seen = new Set();
     return tasks.filter(task => {
