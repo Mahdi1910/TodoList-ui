@@ -14,8 +14,24 @@
   border-left: 1px solid var(--border-color);
 }
 
+.subtask-list:empty {
+  display: none;
+}
+
 .subtask-list[hidden] {
   display: none !important;
+}
+
+.subtask-list[hidden][data-drag-reveal="true"] {
+  display: flex !important;
+}
+
+.subtask-list[hidden][data-drag-reveal="true"] > .subtask-drag-item {
+  display: none;
+}
+
+.subtask-drag-item {
+  width: 100%;
 }
 
 .subtask-card {
@@ -70,10 +86,11 @@
   color: var(--text-primary);
 }
 
-.task-action-menu {
+.task-action-menu,
+.task-parent-picker {
   position: fixed;
   z-index: 1150;
-  width: 170px;
+  width: min(220px, calc(100vw - 16px));
   padding: 6px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -81,11 +98,24 @@
   box-shadow: var(--shadow-lg);
 }
 
-.task-action-menu[hidden] {
+.task-action-menu {
+  width: 170px;
+}
+
+.task-parent-picker {
+  z-index: 1160;
+  max-height: min(320px, calc(100vh - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.task-action-menu[hidden],
+.task-parent-picker[hidden] {
   display: none !important;
 }
 
-.task-action-menu button {
+.task-action-menu button,
+.task-parent-picker button {
   width: 100%;
   border: 0;
   border-radius: var(--radius-sm);
@@ -98,9 +128,27 @@
   font-size: 13px;
 }
 
+.task-parent-picker button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .task-action-menu button:hover,
-.task-action-menu button:focus-visible {
+.task-action-menu button:focus-visible,
+.task-parent-picker button:hover,
+.task-parent-picker button:focus-visible {
   background: var(--bg-hover);
+}
+
+.task-action-menu button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.task-action-menu button:disabled:hover {
+  background: transparent;
 }
 
 .task-action-menu [data-task-action="delete"]:hover,
