@@ -3,7 +3,8 @@
  * Loads durable storage, hydrates AppState, then initializes UI modules.
  */
 
-const STORAGE_SCRIPTS = [
+const BOOTSTRAP_SCRIPTS = [
+  'js/components/task-drag-hierarchy.js',
   'js/storage/db-schema.js',
   'js/storage/db.js',
   'js/storage/repositories.js',
@@ -12,6 +13,7 @@ const STORAGE_SCRIPTS = [
   'js/storage/data-service.js',
   'js/storage/data-service-taxonomy.js',
   'js/storage/data-service-drag.js',
+  'js/storage/data-service-hierarchy.js',
   'js/storage/ui-persistence-bindings.js'
 ];
 
@@ -45,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.ThemeManager.init();
 
   try {
-    for (const src of STORAGE_SCRIPTS) await loadScript(src);
+    for (const src of BOOTSTRAP_SCRIPTS) await loadScript(src);
     await window.AppPersistence.initialize();
     await window.AppPersistence.hydrateState();
     window.bindPersistentUiMutations();
