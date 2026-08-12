@@ -257,3 +257,5 @@ window.TaskDragHierarchyMethods = {
     });
   }
 };
+
+Object.assign(window.TaskDragMethods, window.TaskDragHierarchyMethods);
