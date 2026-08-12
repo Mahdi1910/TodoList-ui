@@ -1,22 +1,5 @@
 window.TaskDragCommitMethods = {
   commitTaskDrag() {
-    const session = this.dragSession;
-    if (!session) return;
-    const finalIds = this.collectVisibleDragOrder();
-    const destination = this.getDropLaneContext(session.currentLane);
-    const orderChanged = !this.areTaskIdOrdersEqual(session.baselineIds, finalIds);
-    const metadataChanged = this.hasDragMetadataChange(session.sourceContext, destination);
-    if (!orderChanged && !metadataChanged) {
-      this.cleanupTaskDrag(true);
-      return;
-    }
-
-    if (orderChanged) window.AppState.rebaseVisibleRootOrder(finalIds);
-    if (metadataChanged) this.applyDragDestinationMutation(session.taskId, session.sourceContext, destination);
-    if (window.WorkspaceControls) {
-      window.WorkspaceControls.sortKey = 'custom';
-      window.WorkspaceControls.syncUI();
-    }
     this.cleanupTaskDrag(true);
   },
 
@@ -32,40 +15,24 @@ window.TaskDragCommitMethods = {
       source.groupKey !== destination.groupKey
     );
   },
-  applyDragDestinationMutation(taskId, source, destination) {
-    const task = window.AppState.getTask(taskId);
-    if (!task || source.groupType !== destination.groupType) return false;
-    const key = destination.groupKey ?? '';
-    if (destination.groupType === 'priority') {
-      window.AppState.updateTask(taskId, { priority: key });
-      return true;
-    }
-    if (destination.groupType === 'date') {
-      window.AppState.updateTask(taskId, { dueDate: key || null });
-      return true;
-    }
-    if (destination.groupType === 'project') {
-      window.AppState.updateTask(taskId, { project: key || '' });
-      return true;
-    }
-    if (destination.groupType === 'tag') {
-      const currentTags = [...window.AppState.normalizeTask(task).tags];
-      let nextTags;
-      if (!key) nextTags = [];
-      else {
-        nextTags = source.groupKey ? currentTags.filter(tag => tag !== source.groupKey) : currentTags;
-        if (!nextTags.includes(key)) nextTags.push(key);
-      }
-      window.AppState.updateTask(taskId, { tags: nextTags });
-      return true;
-    }
-    return false;
+
+  isHierarchyPreviewUnchanged(session, destination) {
+    if (!session?.initialPreview) return false;
+    const initial = session.initialPreview;
+    const sameHierarchy = initial.level === session.previewLevel &&
+      (initial.parentId || null) === (session.previewParentId || null) &&
+      (initial.beforeTaskId || null) === (session.previewBeforeTaskId || null) &&
+      (initial.afterTaskId || null) === (session.previewAfterTaskId || null);
+    const sameGroup = session.sourceContext?.groupType === destination?.groupType &&
+      session.sourceContext?.groupKey === destination?.groupKey;
+    return sameHierarchy && sameGroup;
   },
 
   cancelTaskDrag() {
     if (!this.dragSession) return;
     this.cleanupTaskDrag(true);
   },
+
   cleanupTaskDrag(render = false) {
     const session = this.dragSession;
     if (!session) return;
@@ -74,8 +41,11 @@ window.TaskDragCommitMethods = {
       try { this.dragWorkspace.releasePointerCapture(session.pointerId); } catch (_) {}
     }
     this.cancelPendingTouchDrag?.();
-    session.family?.remove();
+    session.dragUnit?.remove();
     session.placeholder?.remove();
+    document.querySelectorAll('.subtask-list[data-drag-reveal="true"]').forEach(host => {
+      delete host.dataset.dragReveal;
+    });
     document.body.classList.remove('task-drag-active');
     document.querySelectorAll('.task-drop-lane.is-drop-target').forEach(lane => lane.classList.remove('is-drop-target'));
     this.dragSession = null;
