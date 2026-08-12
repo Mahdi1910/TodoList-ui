@@ -32,9 +32,8 @@ window.TaskDragTouchMethods = {
     const touch = e.changedTouches[0] || e.touches[0];
     if (!touch) return;
     this.touchDragPending = {
+      ...target,
       identifier: touch.identifier,
-      family: target.family,
-      taskId: target.task.id,
       startX: touch.clientX,
       startY: touch.clientY,
       x: touch.clientX,
@@ -45,7 +44,7 @@ window.TaskDragTouchMethods = {
 
   activateTouchTaskDrag() {
     const pending = this.touchDragPending;
-    if (!pending?.family?.isConnected || this.dragSession) return this.cancelPendingTouchDrag();
+    if (!pending?.unit?.isConnected || this.dragSession) return this.cancelPendingTouchDrag();
     this.touchDragPending = null;
     this.beginTaskDragSession(pending, 'touch');
   },
