@@ -49,13 +49,31 @@ window.TaskDragMethods = {
 
   getTaskDragTarget(target) {
     if (document.querySelector('.modal-overlay.active')) return null;
-    if (target.closest('button,input,a,select,textarea,.task-checkbox-wrapper,.subtask-card')) return null;
+    if (target.closest('button,input,a,select,textarea,.task-checkbox-wrapper')) return null;
+
+    const subtaskItem = target.closest('.subtask-drag-item');
+    if (subtaskItem) {
+      const task = window.AppState.getTask(subtaskItem.dataset.taskId);
+      const sourceFamily = subtaskItem.closest('.task-family');
+      const sourceLane = sourceFamily?.closest('[data-task-drop-lane]');
+      if (!task?.parentTaskId || !sourceFamily || !sourceLane) return null;
+      return {
+        unit: subtaskItem,
+        task,
+        level: 'subtask',
+        parentId: task.parentTaskId,
+        sourceFamily,
+        sourceLane
+      };
+    }
+
     const family = target.closest('.task-family');
-    const rootCard = family?.querySelector(':scope > .task-card:not(.subtask-card)');
-    if (!family || !rootCard || !rootCard.contains(target)) return null;
+    const rootCard = this.getRootCard?.(family) || family?.querySelector(':scope > .task-card:not(.subtask-card)');
+    const sourceLane = family?.closest('[data-task-drop-lane]');
+    if (!family || !rootCard || !rootCard.contains(target) || !sourceLane) return null;
     const task = window.AppState.getTask(family.dataset.parentId);
     if (!task || task.parentTaskId) return null;
-    return { family, task };
+    return { unit: family, task, level: 'root', parentId: null, sourceFamily: family, sourceLane };
   },
 
   onTaskPointerDown(e) {
@@ -63,12 +81,10 @@ window.TaskDragMethods = {
     if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const target = this.getTaskDragTarget(e.target);
     if (!target) return;
-    const { family, task } = target;
     this.cancelPendingTaskDrag();
     this.dragPending = {
+      ...target,
       pointerId: e.pointerId,
-      family,
-      taskId: task.id,
       startX: e.clientX,
       startY: e.clientY,
       x: e.clientX,
@@ -97,17 +113,18 @@ window.TaskDragMethods = {
     const distance = Math.hypot(e.clientX - this.dragPending.startX, e.clientY - this.dragPending.startY);
     if (distance > 8) this.cancelPendingTaskDrag();
   },
+
   activatePointerTaskDrag() {
     const pending = this.dragPending;
-    if (!pending?.family?.isConnected || this.dragSession) return this.cancelPendingTaskDrag();
+    if (!pending?.unit?.isConnected || this.dragSession) return this.cancelPendingTaskDrag();
     this.dragPending = null;
     this.beginTaskDragSession(pending, 'pointer');
   },
 
   beginTaskDragSession(pending, inputType) {
-    const task = window.AppState.getTask(pending.taskId);
-    const sourceLane = pending.family.closest('[data-task-drop-lane]');
-    if (!task || !sourceLane) return;
+    const task = window.AppState.getTask(pending.task.id);
+    const sourceLane = pending.sourceLane;
+    if (!task || !sourceLane || !pending.unit?.isConnected) return;
 
     this.closeTaskActionMenu?.(false);
     this.closeAllContextMenus?.();
@@ -115,25 +132,44 @@ window.TaskDragMethods = {
     window.SidebarComponent?.closeSidebarActionMenus();
     window.SubtaskEditorComponent?.closeMenus();
 
-    const rect = pending.family.getBoundingClientRect();
+    const rect = pending.unit.getBoundingClientRect();
+    const alignment = this.measureHierarchyAlignment?.(sourceLane, pending.sourceFamily) || {
+      rootX: rect.left,
+      childX: rect.left,
+      indent: 0
+    };
+    const initialPreview = this.buildInitialHierarchyPreview?.(pending) || {
+      level: pending.level,
+      parentId: pending.parentId || null,
+      beforeTaskId: null,
+      afterTaskId: null,
+      forced: false
+    };
+
     const placeholder = document.createElement('div');
-    placeholder.className = 'task-drop-placeholder';
+    placeholder.className = `task-drop-placeholder ${pending.level === 'subtask' ? 'is-subtask-preview' : 'is-root-preview'}`;
+    placeholder.dataset.previewLevel = pending.level;
     placeholder.style.height = `${rect.height}px`;
-    placeholder.style.width = `${rect.width}px`;
-    sourceLane.insertBefore(placeholder, pending.family);
-    this.dragLayer.appendChild(pending.family);
-    pending.family.classList.add('is-dragging');
-    pending.family.style.width = `${rect.width}px`;
-    pending.family.style.left = `${rect.left}px`;
-    pending.family.style.top = `${rect.top}px`;
+    placeholder.style.width = '100%';
+    pending.unit.parentElement.insertBefore(placeholder, pending.unit);
+
+    this.dragLayer.appendChild(pending.unit);
+    pending.unit.classList.add('is-dragging');
+    pending.unit.style.width = `${rect.width}px`;
+    pending.unit.style.left = `${rect.left}px`;
+    pending.unit.style.top = `${rect.top}px`;
 
     this.dragSession = {
       inputType,
       pointerId: inputType === 'pointer' ? pending.pointerId : null,
       touchIdentifier: inputType === 'touch' ? pending.identifier : null,
       taskId: task.id,
-      completed: Boolean(task.completed),
-      family: pending.family,
+      laneType: sourceLane.dataset.taskDropLane || 'active',
+      dragUnit: pending.unit,
+      sourceLevel: pending.level,
+      sourceParentId: pending.parentId || null,
+      sourceFamily: pending.sourceFamily,
+      sourceChildHost: pending.level === 'subtask' ? placeholder.parentElement : null,
       placeholder,
       sourceLane,
       currentLane: sourceLane,
@@ -142,12 +178,21 @@ window.TaskDragMethods = {
       offsetY: pending.y - rect.top,
       x: pending.x,
       y: pending.y,
-      startSortKey: window.WorkspaceControls?.sortKey || 'custom',
-      baselineIds: []
+      horizontalIntent: pending.level,
+      previewLevel: initialPreview.level,
+      previewParentId: initialPreview.parentId,
+      previewBeforeTaskId: initialPreview.beforeTaskId,
+      previewAfterTaskId: initialPreview.afterTaskId,
+      forcedChildZone: false,
+      initialPreview: { ...initialPreview },
+      rootAlignmentX: alignment.rootX,
+      subtaskAlignmentX: alignment.childX,
+      hierarchyIndent: alignment.indent,
+      startSortKey: window.WorkspaceControls?.sortKey || 'custom'
     };
+
     document.body.classList.add('task-drag-active');
     sourceLane.classList.add('is-drop-target');
-    this.dragSession.baselineIds = this.collectVisibleDragOrder();
     this.dragSuppressClickUntil = performance.now() + 700;
     if (inputType === 'pointer') {
       try { this.dragWorkspace.setPointerCapture(pending.pointerId); } catch (_) {}
@@ -159,8 +204,8 @@ window.TaskDragMethods = {
   positionFloatingFamily(x, y) {
     const session = this.dragSession;
     if (!session) return;
-    session.family.style.left = `${x - session.offsetX}px`;
-    session.family.style.top = `${y - session.offsetY}px`;
+    session.dragUnit.style.left = `${x - session.offsetX}px`;
+    session.dragUnit.style.top = `${y - session.offsetY}px`;
   },
 
   getDropLaneContext(lane) {
@@ -173,8 +218,7 @@ window.TaskDragMethods = {
 
   isCompatibleDropLane(lane) {
     if (!lane || lane.offsetParent === null) return false;
-    const expected = this.dragSession?.completed ? 'completed' : 'active';
-    return lane.dataset.taskDropLane === expected;
+    return lane.dataset.taskDropLane === this.dragSession?.laneType;
   },
 
   findDropLaneAtPoint(x, y) {
@@ -184,46 +228,24 @@ window.TaskDragMethods = {
     }
     return null;
   },
-  updateTaskDropTarget(x, y) {
-    const session = this.dragSession;
-    if (!session) return;
-    const lane = this.findDropLaneAtPoint(x, y);
-    if (!lane) return;
-    const oldLane = session.currentLane;
-    const siblings = [...lane.children].filter(element =>
-      element.classList?.contains('task-family') && element.dataset.parentId !== session.taskId
-    );
-    const before = siblings.find(element => {
-      const rect = element.getBoundingClientRect();
-      return y < rect.top + rect.height / 2;
-    }) || null;
-    const desiredNext = before;
-    const alreadyPlaced = session.placeholder.parentElement === lane && session.placeholder.nextElementSibling === desiredNext;
-    if (alreadyPlaced || (!desiredNext && session.placeholder.parentElement === lane && session.placeholder === lane.lastElementChild)) {
-      session.currentLane = lane;
-      return;
-    }
 
-    const rects = this.captureDragFamilyRects([oldLane, lane]);
-    if (before) lane.insertBefore(session.placeholder, before);
-    else lane.appendChild(session.placeholder);
-    session.currentLane = lane;
-    document.querySelectorAll('.task-drop-lane.is-drop-target').forEach(item => item.classList.remove('is-drop-target'));
-    lane.classList.add('is-drop-target');
-    this.animateDragFamilyShift(rects);
+  updateTaskDropTarget(x, y) {
+    this.resolveHierarchyDrop?.(x, y);
   },
 
-  captureDragFamilyRects(lanes) {
+  captureDragFamilyRects(containers) {
     const rects = new Map();
-    [...new Set(lanes.filter(Boolean))].forEach(lane => {
-      [...lane.children].forEach(element => {
-        if (element.classList?.contains('task-family') && !element.classList.contains('is-dragging')) {
+    [...new Set((containers || []).filter(Boolean))].forEach(container => {
+      [...container.children].forEach(element => {
+        const movable = element.classList?.contains('task-family') || element.classList?.contains('subtask-drag-item');
+        if (movable && !element.classList.contains('is-dragging')) {
           rects.set(element, element.getBoundingClientRect());
         }
       });
     });
     return rects;
   },
+
   animateDragFamilyShift(beforeRects) {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     beforeRects.forEach((before, element) => {
@@ -243,17 +265,16 @@ window.TaskDragMethods = {
 
   collectVisibleDragOrder() {
     const session = this.dragSession;
-    if (!session) return [];
-    const laneType = session.completed ? 'completed' : 'active';
+    if (!session || session.previewLevel !== 'root') return [];
     const seen = new Set();
     const ordered = [];
-    document.querySelectorAll(`[data-task-drop-lane="${laneType}"]`).forEach(lane => {
+    document.querySelectorAll(`[data-task-drop-lane="${session.laneType}"]`).forEach(lane => {
       if (lane.offsetParent === null) return;
       [...lane.children].forEach(element => {
         let id = null;
         if (element === session.placeholder) id = session.taskId;
         else if (element.classList?.contains('task-family')) id = element.dataset.parentId;
-        if (!id || id === session.taskId && element !== session.placeholder || seen.has(id)) return;
+        if (!id || seen.has(id)) return;
         seen.add(id);
         ordered.push(id);
       });
