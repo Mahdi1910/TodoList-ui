@@ -48,6 +48,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     for (const src of BOOTSTRAP_SCRIPTS) await loadScript(src);
+
+    // task-drag-hierarchy.js loads after tasks.js has already copied TaskDragMethods.
+    // Install the hierarchy mixin on the live component before persistence bindings and init.
+    if (!window.TasksComponent || !window.TaskDragHierarchyMethods) {
+      throw new Error('Hierarchy drag component could not be loaded.');
+    }
+    Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods);
+
     await window.AppPersistence.initialize();
     await window.AppPersistence.hydrateState();
     window.bindPersistentUiMutations();
