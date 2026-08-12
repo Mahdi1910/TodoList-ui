@@ -69,6 +69,31 @@ window.bindPersistentUiMutations = function bindPersistentUiMutations() {
     }
   };
 
+  window.TasksComponent.handleTaskActionLinkParent = async function linkPersistentParent(parentId) {
+    const taskId = this.taskActionTargetId;
+    if (!taskId || !parentId) return;
+    try {
+      await window.AppDataService.linkTaskToParent(taskId, parentId);
+      this.closeTaskParentPicker(false);
+      this.closeTaskActionMenu(false);
+      this.refreshAfterTaskMutation();
+    } catch (error) {
+      fail('Could not link this task to the selected parent.', error);
+    }
+  };
+
+  window.TasksComponent.handleTaskActionUnlink = async function unlinkPersistentTask() {
+    const taskId = this.taskActionTargetId;
+    if (!taskId) return;
+    try {
+      await window.AppDataService.unlinkTask(taskId);
+      this.closeTaskActionMenu(false);
+      this.refreshAfterTaskMutation();
+    } catch (error) {
+      fail('Could not unlink this subtask.', error);
+    }
+  };
+
   window.TasksComponent.handleTaskActionDelete = async function deletePersistentTask() {
     const task = window.AppState.getTask(this.taskActionTargetId);
     if (!task) return;
@@ -210,24 +235,30 @@ window.bindPersistentUiMutations = function bindPersistentUiMutations() {
     }
   };
 
-  window.TasksComponent.commitTaskDrag = async function commitPersistentDrag() {
+  window.TasksComponent.commitTaskDrag = async function commitPersistentHierarchyDrag() {
     const session = this.dragSession;
     if (!session) return;
-    const finalIds = this.collectVisibleDragOrder();
     const destination = this.getDropLaneContext(session.currentLane);
-    const orderChanged = !this.areTaskIdOrdersEqual(session.baselineIds, finalIds);
-    const metadataChanged = this.hasDragMetadataChange(session.sourceContext, destination);
-    if (!orderChanged && !metadataChanged) return this.cleanupTaskDrag(true);
+    if (this.isHierarchyPreviewUnchanged(session, destination)) {
+      this.cleanupTaskDrag(true);
+      return;
+    }
     try {
-      await window.AppDataService.commitTaskDrag({
-        taskId: session.taskId, orderedVisibleIds: finalIds,
-        sourceContext: session.sourceContext, destination
+      await window.AppDataService.commitHierarchyDrag({
+        taskId: session.taskId,
+        targetLevel: session.previewLevel,
+        targetParentId: session.previewParentId,
+        beforeTaskId: session.previewBeforeTaskId,
+        afterTaskId: session.previewAfterTaskId,
+        sourceContext: session.sourceContext,
+        destinationContext: destination
       });
       if (window.WorkspaceControls) {
-        window.WorkspaceControls.sortKey = 'custom'; window.WorkspaceControls.syncUI();
+        window.WorkspaceControls.sortKey = 'custom';
+        window.WorkspaceControls.syncUI();
       }
     } catch (error) {
-      fail('Could not save the new task position.', error);
+      fail('Could not save the new task hierarchy or position.', error);
     }
     this.cleanupTaskDrag(true);
   };
