@@ -4,7 +4,7 @@
 
 Fix the failed drag implementation from ID 7 without redesigning the hierarchy feature.
 
-The confirmed primary defect is script/mixin load order:
+The confirmed primary defect is mixin integration order:
 
 - `task-drag.js` defines `window.TaskDragMethods`.
 - `tasks.js` copies the methods that exist at that moment into `window.TasksComponent`.
@@ -16,30 +16,34 @@ This causes the floating card to move while the placeholder/destination never ch
 
 ## Changes
 
-### 1. Load the hierarchy resolver in the static component dependency chain
+### 1. Explicitly install the hierarchy mixin onto the live TasksComponent during bootstrap
 
-Update `index.html` so:
+Keep the existing dynamic load of `js/components/task-drag-hierarchy.js`, but immediately after the bootstrap scripts finish loading and before persistence bindings / component initialization, explicitly copy the hierarchy methods onto the already-created component:
 
 ```text
-task-drag.js
-→ task-drag-hierarchy.js
-→ task-drag-touch.js
-→ task-drag-commit.js
-→ ...
-→ tasks.js
+load task-drag-hierarchy.js
+        ↓
+TaskDragMethods receives hierarchy methods
+        ↓
+TasksComponent receives the same hierarchy methods explicitly
+        ↓
+bind persistence overrides
+        ↓
+TasksComponent.init()
 ```
 
-`task-drag-hierarchy.js` must run after `task-drag.js` exists but before `tasks.js` copies the drag mixin methods into `TasksComponent`.
+This directly fixes the copy-vs-reference bug without rewriting the large `index.html` file.
 
-### 2. Remove the late dynamic hierarchy load
+Required invariant before `TasksComponent.init()`:
 
-Update `js/app.js` and remove `js/components/task-drag-hierarchy.js` from the dynamic bootstrap list.
+```text
+typeof TasksComponent.resolveHierarchyDrop === 'function'
+typeof TasksComponent.measureHierarchyAlignment === 'function'
+typeof TasksComponent.buildInitialHierarchyPreview === 'function'
+typeof TasksComponent.applyHierarchyPreview === 'function'
+```
 
-The dynamic bootstrap should remain responsible for persistence/storage modules, not for a component mixin that must exist before `TasksComponent` is assembled.
-
-This also prevents the same hierarchy module from being executed twice.
-
-### 3. Make missing hierarchy integration fail loudly
+### 2. Make missing hierarchy integration fail loudly
 
 Update `js/components/task-drag.js`:
 
@@ -49,11 +53,12 @@ Update `js/components/task-drag.js`:
   - `measureHierarchyAlignment`
   - `buildInitialHierarchyPreview`
   - `applyHierarchyPreview`
-- remove optional no-op behavior from the central movement path where appropriate so a future load-order regression cannot silently produce a floating-but-nonfunctional drag UI.
+- remove optional no-op behavior from the central hierarchy movement/initialization path;
+- call the hierarchy methods directly once integration has been validated.
 
 Do not add browser alerts. A clear thrown initialization error / console failure is preferable to silently enabling a broken drag system.
 
-### 4. Preserve the existing ID 7 hierarchy resolver and persistence service
+### 3. Preserve the existing ID 7 hierarchy resolver and persistence service
 
 Do not rewrite the geometry, hierarchy rules, menu Link/Unlink, or IndexedDB transaction model unless source verification finds another concrete blocker.
 
@@ -79,18 +84,19 @@ The existing persistence layer already contains:
 
 The immediate goal is to reconnect those implemented pieces to the active drag component.
 
-### 5. Static integration verification
+### 4. Static integration verification
 
 After implementation, verify from source that:
 
-1. `task-drag-hierarchy.js` appears in `index.html` after `task-drag.js` and before `tasks.js`.
-2. `app.js` no longer dynamically loads `task-drag-hierarchy.js`.
-3. when `tasks.js` runs, `window.TaskDragMethods.resolveHierarchyDrop` already exists.
-4. `TasksComponent.initTaskDrag()` validates the hierarchy methods before binding events.
-5. pointer and touch still call the same `updateTaskDropTarget()` path.
-6. the persistence binding still overrides `commitTaskDrag()` with `AppDataService.commitHierarchyDrag()` before `TasksComponent.init()` runs.
-7. Link/Unlink behavior is untouched.
-8. no whole-lane blue highlight is reintroduced.
+1. `app.js` loads `task-drag-hierarchy.js` before `bindPersistentUiMutations()` and before `TasksComponent.init()`.
+2. `app.js` explicitly assigns `TaskDragHierarchyMethods` onto `TasksComponent` after the script loads.
+3. `TasksComponent.initTaskDrag()` validates hierarchy methods before binding drag events.
+4. `updateTaskDropTarget()` directly invokes `resolveHierarchyDrop()` rather than silently optional-chaining it.
+5. drag session initialization directly uses the hierarchy alignment and initial-preview methods.
+6. pointer and touch still call the same `updateTaskDropTarget()` path.
+7. the persistence binding still overrides `commitTaskDrag()` with `AppDataService.commitHierarchyDrag()` before `TasksComponent.init()` runs.
+8. Link/Unlink behavior is untouched.
+9. no whole-lane blue highlight is reintroduced.
 
 ## Manual acceptance tests
 
