@@ -1,6 +1,6 @@
 window.TaskRendererMethods = {
   render() {
-    const filtered = window.AppState.getFilteredTasks();
+    const filtered = window.TaskFilter?.getDisplayTasks?.() || window.AppState.getFilteredTasks();
     const viewType = window.WorkspaceControls?.viewType || 'list';
     if (viewType === 'kanban') this.renderKanban(filtered);
     else this.renderList(filtered);
@@ -11,9 +11,8 @@ window.TaskRendererMethods = {
     this.listViewEl.hidden = false;
     this.kanbanViewEl.hidden = true;
     this.ensureCompletedSectionToggle();
-    const roots = window.AppState.getRootTasks(filtered);
-    const activeTasks = roots.filter(task => !task.completed);
-    const completedTasks = roots.filter(task => task.completed);
+    const activeTasks = filtered.filter(task => !task.completed);
+    const completedTasks = filtered.filter(task => task.completed);
     const groupKey = window.WorkspaceControls?.groupKey || 'none';
     if (groupKey === 'none') this.setDropLaneContext(this.activeListEl, 'active', 'none', 'all');
     else this.clearDropLaneContext(this.activeListEl);
@@ -23,7 +22,7 @@ window.TaskRendererMethods = {
     if (activeTasks.length) {
       if (groupKey === 'none') {
         const ordered = window.WorkspaceControls?.sortTasks(activeTasks) || [...activeTasks];
-        ordered.forEach(task => this.activeListEl.appendChild(this.createTaskFamily(task)));
+        ordered.forEach(task => this.activeListEl.appendChild(this.createTaskDisplayUnit(task)));
       } else {
         this.renderTaskGroups(activeTasks, groupKey);
       }
@@ -33,7 +32,7 @@ window.TaskRendererMethods = {
     const orderedCompleted = window.WorkspaceControls?.sortTasks(completedTasks) || [...completedTasks];
     this.completedListEl.innerHTML = '';
     this.completedSectionEl.classList.toggle('has-tasks', orderedCompleted.length > 0);
-    orderedCompleted.forEach(task => this.completedListEl.appendChild(this.createTaskFamily(task)));
+    orderedCompleted.forEach(task => this.completedListEl.appendChild(this.createTaskDisplayUnit(task)));
     this.completedCountEl.textContent = `${orderedCompleted.length} ${orderedCompleted.length === 1 ? 'task' : 'tasks'}`;
     this.syncCompletedSectionState(orderedCompleted.length > 0);
   },
@@ -111,6 +110,7 @@ window.TaskRendererMethods = {
       subtaskListId = ''
     } = options;
     const normalized = window.AppState.normalizeTask(task);
+    const logicalIsSubtask = Boolean(normalized.parentTaskId);
     const card = document.createElement('div');
     card.className = `task-card${normalized.completed ? ' completed' : ''}${isSubtask ? ' subtask-card' : ''}${compact ? ' compact-subtask-card' : ''}`;
     card.dataset.id = normalized.id;
@@ -137,9 +137,9 @@ window.TaskRendererMethods = {
     details.className = 'task-details';
     details.setAttribute('tabindex', '0');
     details.setAttribute('role', 'button');
-    details.setAttribute('aria-label', `Edit ${isSubtask ? 'subtask' : 'task'}: ${normalized.title}`);
+    details.setAttribute('aria-label', `Edit ${logicalIsSubtask ? 'subtask' : 'task'}: ${normalized.title}`);
     details.setAttribute('title',
-      `Click or press Enter to edit ${isSubtask ? 'subtask' : 'task'}`);
+      `Click or press Enter to edit ${logicalIsSubtask ? 'subtask' : 'task'}`);
     const title = document.createElement('span');
     title.className = 'task-title';
     title.textContent = normalized.title;
@@ -182,7 +182,7 @@ window.TaskRendererMethods = {
       if (e.type === 'keydown') e.preventDefault();
       e.stopPropagation();
       this.closeTaskActionMenu(false);
-      if (isSubtask) window.SubtaskEditorComponent?.openEdit(normalized.id, details);
+      if (logicalIsSubtask) window.SubtaskEditorComponent?.openEdit(normalized.id, details);
       else this.openModal(normalized);
     };
     details.addEventListener('click', handleEditTrigger);
