@@ -7,6 +7,7 @@ const BOOTSTRAP_SCRIPTS = [
   'js/components/task-drag-hierarchy.js',
   'js/repeat/repeat-engine.js',
   'js/components/schedule-repeat-end.js',
+  'js/components/schedule-repeat-validation.js',
   'js/storage/db-schema.js',
   'js/storage/db.js',
   'js/storage/repositories.js',
@@ -58,11 +59,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window.TasksComponent || !window.TaskDragHierarchyMethods) {
       throw new Error('Hierarchy drag component could not be loaded.');
     }
-    if (!window.RepeatEngine || !window.ScheduleComponent || !window.ScheduleRepeatEndMethods) {
+    if (!window.RepeatEngine || !window.ScheduleComponent ||
+        !window.ScheduleRepeatEndMethods || !window.ScheduleRepeatValidationMethods) {
       throw new Error('Repeat recurrence components could not be loaded.');
     }
     Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods);
-    Object.assign(window.ScheduleComponent, window.ScheduleRepeatEndMethods);
+    Object.assign(
+      window.ScheduleComponent,
+      window.ScheduleRepeatEndMethods,
+      window.ScheduleRepeatValidationMethods
+    );
     window.ScheduleComponent.installRepeatEnhancements();
 
     await window.AppPersistence.initialize();
