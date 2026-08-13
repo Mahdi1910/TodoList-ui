@@ -1,48 +1,129 @@
-# Implementation Plan ID 18 — Consolidate Architecture, State, Persistence, Modules, Taxonomy UI, and Permanent Markup
+# Implementation Plan ID 18 — Safe Architecture Consolidation for Problems #6–#14
+
+> **Revision status:** Revised after `implementation plan/Implementation Plan Review ID 18.md`.
+>
+> The review's central safety criticisms are accepted. This revision changes the migration order, makes runtime-patch removal atomic, delays AppState API removal until all callers migrate, narrows the Project/Tag and markup goals, and isolates the ES-module cutover from business-logic changes.
 
 ## Goal
 
-Solve **Priority 2 Problems #6 through #14** from `problem is need to be fixed.md` as one coordinated architecture cleanup:
+Solve **Priority 2 Problems #6 through #14** from `problem is need to be fixed.md` without changing product behavior or user data:
 
 ```text
-6. Remove ui-persistence-bindings.js runtime patch layer
+6. Remove ui-persistence-bindings.js as a large runtime patch layer
 7. Remove Repeat mapper/service monkey-patching
 8. Reduce AppState responsibilities
-9. Merge duplicated Project/Tag sidebar/modal logic
+9. Merge duplicated Project and Tag sidebar/modal logic
 10. Remove UI-component dependency from the data layer
 11. Simplify JavaScript module loading / bootstrap order
 12. Improve bootstrap error reporting
 13. Remove dead/duplicate HTML immediately replaced by JavaScript
-14. Stop runtime-upgrading permanent markup
+14. Stop runtime-upgrading permanent markup / establish one UI source of truth
 ```
 
-These problems overlap heavily. They should **not** be implemented as nine unrelated patches. The implementation must move the application toward one clear dependency direction:
+These problems overlap, but they must **not** be implemented as one big-bang rewrite.
+
+The governing migration rule is:
+
+> **Move one ownership boundary at a time. Whenever behavior is moved from a runtime patch into its real owner, remove the corresponding old override in the same milestone before testing. Never verify a migrated command while an older patch can still shadow it.**
+
+Target command flow:
 
 ```text
-UI Components
-    ↓ commands
+UI component
+    ↓ command
 AppDataService
-    ↓ transactions
-IndexedDB / Repositories / Mappers
-    ↓ only after successful transaction
-AppStateStore
-    ↓ read model
-AppState + read-only helpers/selectors
-    ↑
-UI renders from current state
+    ↓ transaction
+IndexedDB / repositories / mappers
+    ↓ only after success
+controlled in-memory state synchronization
+    ↓
+AppState read model / selectors
+    ↓
+render
 ```
 
-The final application must have **one implementation for every command**. A developer reading the owning file should be able to see the real runtime behavior without knowing that another file will replace it later.
-
-This is an architecture/maintainability refactor. It must preserve existing behavior and data. It must not redesign the product.
-
-No application implementation is part of this plan commit.
+A developer reading an owning file must be able to see the real runtime behavior. No later-loaded file should secretly replace that behavior.
 
 ---
 
-# 1. Current Architecture — Confirmed Findings
+# 1. Why This Revision Was Necessary
 
-## 1.1 `ui-persistence-bindings.js` changes the real application after components are defined
+The first version of ID 18 had a sound destination architecture but an unsafe migration order.
+
+Two concrete hazards exist in the current application.
+
+## 1.1 AppState mutation APIs are still startup/runtime dependencies
+
+`js/task-relations.js` currently captures mutation methods at module load:
+
+```text
+AppState.addTask
+AppState.updateTask
+AppState.deleteTask
+AppState.deleteProject
+```
+
+It then uses those captured functions while replacing/augmenting AppState behavior.
+
+Other service code also still depends on AppState mutation methods after successful persistence. For example, Project/Tag service flows currently use AppState mutation helpers as part of memory synchronization.
+
+Therefore this is unsafe:
+
+```text
+remove AppState mutation API first
+→ refactor callers later
+```
+
+It can break startup before the UI initializes.
+
+Correct transition:
+
+```text
+A. Introduce pure helpers / controlled memory-sync path
+   WITHOUT deleting old AppState APIs
+
+B. Migrate UI + AppDataService callers
+
+C. Refactor task-relations/task-order so they no longer capture/replace writes
+
+D. Static search proves no production caller remains
+
+E. Only then remove old AppState mutation APIs
+```
+
+This is now a hard removal gate in this plan.
+
+## 1.2 New owner implementations can be hidden by old patches
+
+Example:
+
+```text
+TasksComponent.submitTask updated correctly
+        ↓
+ui-persistence-bindings.js loads later
+        ↓
+TasksComponent.submitTask replaced again
+```
+
+A manual test could pass while actually exercising the old persistence patch, not the newly migrated owner.
+
+Repeat has the same danger:
+
+```text
+mappers.js updated
+        ↓
+repeat-storage.js loads later
+        ↓
+mapper methods replaced/decorated again
+```
+
+Therefore this plan uses **atomic migrate + unshadow + verify** milestones.
+
+---
+
+# 2. Confirmed Current Architecture Problems
+
+## 2.1 `ui-persistence-bindings.js` is currently the real owner of many commands
 
 Current file:
 
@@ -50,12 +131,10 @@ Current file:
 js/storage/ui-persistence-bindings.js
 ```
 
-It replaces methods belonging to many unrelated components after all of those components already have their own implementations.
-
-It currently replaces or decorates at least:
+It replaces/decorates at least:
 
 ```text
-TasksComponent.createTaskCard
+TasksComponent.createTaskCard / checkbox completion
 TasksComponent.submitTask
 SubtaskEditorComponent.submit
 TasksComponent.handleTaskActionLinkParent
@@ -75,46 +154,25 @@ ScheduleComponent.submitCustomReminder
 ScheduleComponent.deleteCustomReminder
 ```
 
-This creates two versions of many actions:
+This creates misleading source ownership:
 
 ```text
-owner file says:
-    mutate AppState directly
+component file
+    contains AppState-only / incomplete implementation
 
-runtime patch says:
-    call AppDataService / IndexedDB
+runtime patch
+    contains actual persistent implementation
 ```
 
-Example:
+A particularly clear example is Task completion: the original card receives an AppState-only checkbox listener, then the persistence patch clones/replaces the checkbox to remove that listener and attach the real persistent one.
 
-```text
-js/components/tasks.js
-    submitTask() → AppState.updateTask/addTask
-
-then later:
-js/storage/ui-persistence-bindings.js
-    replaces submitTask() → AppDataService.updateTask/createTask
-```
-
-Likewise the checkbox rendered by `task-renderer.js` initially gets an AppState-only change listener, then the persistence binding clones/replaces the checkbox solely to remove that listener and attach a persistent listener.
-
-This is the central Problem #6.
-
-Required end state:
-
-> The owning UI method contains the real persistent behavior from the beginning. No runtime patch file is needed.
+Problem #6 is therefore real and high priority.
 
 ---
 
-## 1.2 Repeat storage changes mapper/service behavior after definition
+## 2.2 Repeat behavior is installed by monkey-patching after base modules exist
 
-Current file:
-
-```text
-js/storage/repeat-storage.js
-```
-
-It captures existing mapper/service methods and replaces them:
+`js/storage/repeat-storage.js` currently replaces/decorates:
 
 ```text
 TodoStorageMappers.taskToRow
@@ -125,163 +183,105 @@ AppDataService.buildTask
 AppDataService.writeTaskAggregate
 ```
 
-It also adds:
+It also adds Repeat repair behavior.
 
-```text
-AppDataService.repairRepeatState
-```
-
-The final runtime mapper therefore cannot be understood by reading `mappers.js` alone.
-
-Current Repeat hydration also uses a hidden side channel:
+The current mapper path transports recurrence state through a hidden/non-enumerable property:
 
 ```text
 repeat.__repeatState
 ```
 
-which is added as a non-enumerable property and later consumed by the task mapper.
-
-Required end state:
-
-> Repeat-aware row formats, task hydration, task building, aggregate writing, and repair are explicit in their real modules. No mapper decoration and no hidden `__repeatState` transport.
-
----
-
-## 1.3 Repeat task completion replaces the base completion service
-
-Current file:
-
-```text
-js/storage/data-service-repeat.js
-```
-
-It finally replaces:
+`js/storage/data-service-repeat.js` then replaces:
 
 ```text
 AppDataService.toggleTaskStatus
 ```
 
-with the real recurrence-aware behavior.
+with the actual recurrence-aware completion semantics.
 
-That implementation contains important existing product semantics which must be preserved:
-
-```text
-completed task → uncomplete historical occurrence only
-plain subtask completion → complete that child
-repeating subtask completion → complete old occurrence + create next child occurrence
-plain parent completion → complete parent + all children
-repeating parent completion → complete old family + create next family
-repeat end reached → complete old occurrence/family and stop
-familySlotId → preserve subtask template identity across repeating parent families
-active repeating child template → preferred for a family slot
-```
-
-Required end state:
-
-> The recurrence-aware completion implementation is the only explicit task-completion implementation. It must not replace a simpler implementation after load.
+Problem #7 is real and very high risk because these patches contain essential behavior, not optional enhancements.
 
 ---
 
-## 1.4 `AppState` currently mixes read state and domain mutation
+## 2.3 AppState is both read model and write/domain service
 
-Current `js/state.js` currently contains:
+Current `js/state.js` mixes:
 
 ```text
 seed data
 hydration
-normalization
-array reordering
+Task normalization
+Task ordering
 Project CRUD
 Tag CRUD
 Task CRUD
 Task completion mutation
-ID generation
 filter matching
-Today/date helpers
+date helpers
 counts
-Project hierarchy reads
-Tag hierarchy reads
+Project hierarchy helpers
+Tag hierarchy helpers
+navigation/filter state
 ```
 
-Then additional files further replace/extend AppState at runtime:
+Then:
 
 ```text
 js/task-relations.js
 js/task-order.js
 ```
 
-`task-relations.js` captures AppState's original mutation methods, replaces Task mutation behavior, and overrides Project deletion.
+extend/replace more AppState behavior after definition.
 
-`task-order.js` adds both ordering selectors and in-memory mutation operations such as resequencing/rebasing.
-
-This means AppState is simultaneously:
-
-```text
-read model
-write service
-normalizer
-domain rule engine
-hierarchy service
-order service
-seed source
-filter service
-```
-
-Required end state:
-
-> AppState is the hydrated in-memory model plus lightweight read/UI state. Domain writes go through AppDataService. Task hierarchy/order logic stays in dedicated helpers/services.
+Problem #8 is real, but the fix should be **minimal and dependency-driven**, not abstraction for its own sake.
 
 ---
 
-## 1.5 Reminder persistence currently depends on Schedule UI state
+## 2.4 Reminder ownership crosses the UI/data boundary
 
-Current `AppDataService.resolveReminders()` reads:
+Current data service resolves custom reminder IDs by reading:
 
 ```text
 ScheduleComponent.customReminders
 ```
 
-when validating/resolving custom reminder IDs.
-
-Current persistence hydration does the reverse coupling:
+Current hydration writes reminder data directly into:
 
 ```text
-AppPersistence.hydrateState()
-    ↓
-ScheduleComponent.customReminders = ...
+ScheduleComponent.customReminders
 ```
 
-So the data layer knows a UI component, and the persistence layer writes directly into that UI component.
+Reminder save/delete methods also currently live inside `data-service-taxonomy.js`, which is the wrong responsibility.
 
-Required end state:
+Target ownership:
 
 ```text
 IndexedDB reminder_definitions
-    ↓ hydrate
+        ↓ hydrate
 AppState.reminderDefinitions
-    ↓ read
-ScheduleComponent
+        ↓ read
+Schedule UI
 ```
 
 and:
 
 ```text
-Schedule UI command
-    ↓
-AppDataService.save/deleteReminderDefinition
-    ↓
+Schedule command
+        ↓
+AppDataService reminder module
+        ↓
 IndexedDB
-    ↓ success
-AppStateStore updates reminderDefinitions
-    ↓
-Schedule rerenders from state
+        ↓ success
+memory synchronization
+        ↓
+Schedule rerender from state
 ```
 
-No AppDataService or persistence module may read/write `ScheduleComponent`.
+Problem #10 is real and high priority.
 
 ---
 
-## 1.6 Project and Tag UI are mirror implementations
+## 2.5 Project and Tag UI duplicate the same workflows
 
 Current files:
 
@@ -290,442 +290,1049 @@ js/components/sidebar-projects.js
 js/components/sidebar-tags.js
 ```
 
-Both independently implement essentially the same workflows:
+Both implement their own versions of:
 
 ```text
-render hierarchy tree
-create tree node
-open create/edit modal
-populate icon state
-populate parent picker
-populate view type selection
-select icon
+hierarchy rendering
+node construction
+create/edit modal setup
+icon selection
+parent picker population
+view-type selection
 save
-Delete
-close modal
+delete
+close
 ```
 
-`sidebar.js` also binds Project and Tag events separately.
+The goal is not a giant generic component full of Project-vs-Tag branches.
 
-The duplication has already created examples where one side can be changed without automatically changing the other.
+Target:
 
-Required end state:
+```text
+shared taxonomy core
+    + thin Project configuration/wrapper
+    + thin Tag configuration/wrapper
+```
 
-> One taxonomy UI implementation configured for `project` or `tag`, while preserving Project/Tag-specific labels, datasets, CSS compatibility, persistence semantics, and drag behavior.
+The success condition is **one implementation of duplicated behavior**, not mandatory deletion of both wrapper files.
 
 ---
 
-## 1.7 Current loading is split between static scripts and a second dynamic list
+## 2.6 Startup has two script-loading systems and late mixin installation
 
-`index.html` currently loads a long ordered list of classic scripts, ending in:
+Current `index.html` loads a long static classic-script list.
 
-```text
-js/app.js
-```
-
-Then `app.js` contains another ordered list:
+Then `js/app.js` has another ordered list:
 
 ```text
 BOOTSTRAP_SCRIPTS
 ```
 
-which loads more JavaScript sequentially by injecting `<script>` elements.
+and dynamically injects scripts sequentially.
 
-After those dynamic scripts load, `app.js` manually installs late mixins with `Object.assign()` onto live component objects.
+After that it installs late modules with `Object.assign()` onto live component objects.
+
+This makes final behavior depend on exact load order and timing.
+
+Problem #11 is valid, but the module cutover must be isolated from business-logic migration.
+
+---
+
+## 2.7 Bootstrap error reporting collapses unrelated failures into storage errors
+
+Current startup places these under one broad error path:
+
+```text
+dynamic script loading
+integration assertions
+late mixin installation
+IndexedDB open
+hydration
+Repeat repair
+persistence binding installation
+UI initialization boundary
+```
+
+A missing JS integration can therefore result in a message saying local storage could not be opened.
+
+Problem #12 should be addressed **before** risky architecture migrations.
+
+---
+
+## 2.8 Confirmed duplicate/runtime-replaced UI sources
 
 Examples:
 
-```text
-TaskDragHierarchyMethods → TasksComponent
-TaskTaxonomyMenuOrderMethods → TasksComponent
-SidebarTaxonomyDrag*Methods → SidebarComponent
-ScheduleRepeatEndMethods → ScheduleComponent
-ScheduleRepeatValidationMethods → ScheduleComponent
-```
-
-This is fragile because behavior depends on exact timing/order and because files can modify globals at top level.
-
-Required end state:
-
-> One native ES-module dependency graph with explicit `import`/`export`. `index.html` should not maintain a hand-sorted JavaScript dependency list and `app.js` should not inject scripts sequentially.
-
----
-
-## 1.8 Bootstrap error reporting currently collapses unrelated failures into “storage failed”
-
-The entire sequence below currently lives under one broad `try/catch`:
-
-```text
-dynamic module loading
-integration assertions
-late Object.assign mixin installation
-IndexedDB initialize
-hydrate
-Repeat repair
-persistent UI binding installation
-```
-
-A missing JavaScript module or integration failure can therefore produce a user-facing message similar to:
-
-```text
-Local storage could not be opened.
-```
-
-That message may have nothing to do with storage.
-
-Required end state:
-
-> Startup stages have distinct error categories/messages and preserve the underlying exception in the console.
-
----
-
-## 1.9 `index.html` contains confirmed duplicate/dead structures
-
 ### Workspace menu
 
-`index.html` contains a complete Sort / Group / View menu, but `WorkspaceControls.buildLayeredMenu()` immediately replaces `#workspace-menu.innerHTML` with a different View + Sort & Group structure.
+`index.html` contains one complete workspace menu, while `WorkspaceControls.buildLayeredMenu()` immediately replaces it with another structure.
 
-The static HTML is therefore not the real UI.
+### Task Project menu
 
-### Task Project picker
-
-`#menu-project` contains hard-coded Personal and Work rows, but `TasksComponent.init()` immediately calls `renderProjectMenu()` and clears/rebuilds that menu.
-
-The hard-coded rows are dead first-paint placeholders.
-
-Required end state:
-
-> Each permanent structure has one source of truth.
-
----
-
-## 1.10 Permanent controls are being upgraded/inserted at runtime
-
-Confirmed examples:
+`#menu-project` contains hard-coded Personal/Work rows, but Task initialization clears/rebuilds the picker from state.
 
 ### Completed header
 
-`index.html` starts with:
-
-```text
-<div class="section-header-title">...</div>
-```
-
-and `TaskRendererMethods.ensureCompletedSectionToggle()` later constructs a button, moves child nodes into it, and replaces the original header.
+Static HTML begins as a `div`; rendering later replaces it with a semantic collapse button.
 
 ### Task hierarchy actions
 
-`index.html` only contains:
+Permanent Link/Unlink actions are inserted after startup rather than having one stable authoritative owner.
 
-```text
-Add Subtask
-Delete
-```
+### Repeat Ends stylesheet/markup
 
-while `TaskActionMethods.ensureTaskHierarchyActionButtons()` dynamically inserts permanent:
+The Repeat Ends component injects a stylesheet link and creates stable UI structures at runtime.
 
-```text
-Link to Parent
-Unlink
-```
+Problems #13/#14 should be reframed as:
 
-### Repeat Ends UI
-
-`schedule-repeat-end.js` dynamically creates:
-
-```text
-Ends row
-Repeat validation container
-Repeat Ends modal
-```
-
-and even dynamically inserts its stylesheet link.
-
-These are stable application controls, not data-driven rows.
-
-Required end state:
-
-> Permanent controls exist as correct semantic markup at first paint. JavaScript binds behavior and updates state; it does not rebuild the permanent shell.
+> **Every UI structure must have one authoritative owner/source of truth and correct semantics when it becomes interactive. Dynamic component-owned DOM is allowed; duplicate placeholder markup that is immediately replaced is not.**
 
 ---
 
-# 2. Target Architecture
+# 3. Non-Negotiable Data and Behavior Invariants
 
-Final dependency direction:
-
-```text
-index.html
-    ↓ one module entry
-bootstrap.js
-    ↓ imports app start and classifies module-load failure
-app.js
-    ├── AppPersistence
-    ├── AppDataService
-    ├── AppState
-    ├── ThemeManager
-    └── UI components
-
-UI component command
-    ↓
-AppDataService
-    ↓
-TodoDb + TodoRepositories + TodoStorageMappers
-    ↓ successful transaction
-AppStateStore
-    ↓
-AppState/read helpers
-    ↓
-render
-```
-
-Read-only helpers remain separated by responsibility:
+This architecture refactor must preserve:
 
 ```text
-AppState             hydrated data + basic read/UI state
-TaskRelations        task parent/child reads and validation helpers
-TaskOrder            task sibling/root ordering calculations
-TaxonomyOrder        Project/Tag hierarchy + sortOrder reads
-TaskFilter           filter/count/family-aware presentation selection
-RepeatEngine         pure recurrence calculations
-ReminderModel        pure reminder-definition conversion helpers
-```
-
-Write ownership:
-
-```text
-Task CRUD                  AppDataService
-Task completion/repeat     AppDataService completion module
-Task hierarchy/drag        AppDataService hierarchy module
-Project/Tag writes         AppDataService taxonomy module
-Project/Tag drag           AppDataService taxonomy-drag module
-Reminder definitions       AppDataService reminder module
-Workspace settings         AppDataService settings module
-In-memory synchronization  AppStateStore only after DB success
-```
-
----
-
-# 3. Non-Negotiable Behavioral Invariants
-
-This refactor must preserve:
-
-```text
-existing IndexedDB database name/version/stores
-existing user data
-Task/Subtask CRUD behavior
+TodoListDB database name
+IndexedDB VERSION = 1
+all existing store names
+all existing user records
+seed-once behavior
+Task/Subtask CRUD
 one-level Task/Subtask hierarchy rule
-parent Project propagation to subtasks
-Task hierarchy drag behavior
-Project/Tag recursive hierarchy drag behavior
-custom task ordering
+Subtask Project inheritance
+Task hierarchy Link / Unlink
+Task hierarchy drag indent/outdent/reparent/reorder
+Project/Tag recursive hierarchy drag
+Project/Tag cycle prevention
+Project/Tag sortOrder persistence
+custom Task order
 List/Kanban parity
-Group By semantics
+Group By behavior
+saved Project/Tag viewType
 family-aware filtering from ID 15
-Repeat recurrence semantics from ID 9
-Repeat Ends semantics
-custom reminder configuration persistence
-Project/Tag hierarchy ordering
-ID 16 safe Project/Tag Task-menu rendering
-current Timeline-disabled behavior
-current dark/light Theme persistence strategy
+safe Project/Tag Task-menu rendering from ID 16
+Repeat behavior from ID 9
+Repeat Ends date/count semantics
+custom reminder definition persistence
+custom reminder relation cleanup
+Timeline remains disabled
+Theme persistence behavior remains unchanged
 ```
 
-No IndexedDB schema version bump is expected for Problems #6–#14.
+No IndexedDB schema/version migration is expected.
 
-Existing rows already allow:
+Important row fields already used by the app must remain intact:
 
 ```text
 TASKS.familySlotId
+TASK_REPEAT_RULES.endType
+TASK_REPEAT_RULES.endDate
+TASK_REPEAT_RULES.endCount
 TASK_REPEAT_RULES.seriesId
 TASK_REPEAT_RULES.occurrenceNumber
 TASK_REPEAT_RULES.anchorDate
 TASK_REPEAT_RULES.anchorDay
 TASK_REPEAT_RULES.anchorMonth
+```
+
+---
+
+# 4. Global Safety Rules for Every Milestone
+
+## 4.1 Persist first, mutate memory second
+
+For every domain command:
+
+```text
+calculate next durable state
+        ↓
+IndexedDB transaction
+        ↓ success
+update in-memory state
+        ↓
+render
+```
+
+Do not modify live AppState first and then try to persist.
+
+## 4.2 Never verify shadowed behavior
+
+Whenever a runtime override is migrated:
+
+```text
+move final behavior to owner
++
+remove that exact old override
++
+remove any duplicate listener/install path
++
+then verify
+```
+
+No milestone is complete while two active implementations exist.
+
+## 4.3 Every mutation test includes refresh persistence
+
+After a successful command:
+
+```text
+perform mutation
+refresh browser
+confirm result remains
+```
+
+Immediate UI success alone is insufficient for persistence refactors.
+
+## 4.4 Do not reconstruct complex behavior from memory
+
+Before deleting an old Repeat/persistence patch:
+
+```text
+map existing behavior
+implement explicit equivalent
+remove shadowing patch
+then test parity
+```
+
+## 4.5 No browser automation
+
+Do not use Chrome/Edge/Puppeteer/Playwright/Selenium/headless browser automation for this project.
+
+Use:
+
+```text
+static source/reference checks
+small pure-JS checks when helpful
+manual browser/phone verification
+```
+
+## 4.6 Keep modules focused
+
+New/refactored source modules should remain small and responsibility-focused. Preserve the project's preference for source files around or below ~300 lines where practical; split by responsibility rather than creating a giant architecture file.
+
+---
+
+# 5. Phase 0 — Resolve Overlapping Pending Plans Before ID 18
+
+ID 18 touches files also covered by pending plans:
+
+```text
+ID 13 — modal focus / aria-hidden / inert lifecycle
+ID 17 — Subtask Tag taxonomy order
+```
+
+Preferred execution:
+
+```text
+implement + manually verify ID 13
+implement + manually verify ID 17
+then begin ID 18
+```
+
+Why:
+
+- ID 18 will substantially change Tasks, Subtask editor, Project/Tag UI, Schedule, and bootstrap.
+- Leaving ID 13/17 pending risks making their plans describe obsolete code.
+
+If ID 18 must begin before either plan is complete, explicitly absorb that plan's acceptance criteria into the relevant ID 18 milestone and mark the older plan as superseded. Do not silently invalidate it.
+
+Existing behavior from already implemented plans is a regression invariant:
+
+```text
+ID 15 family-aware filtering
+ID 16 safe Task Project/Tag DOM rendering
+```
+
+---
+
+# 6. Phase 1 — Improve Bootstrap Error Reporting First (#12)
+
+Do this while the existing classic-script/dynamic-loader architecture still exists.
+
+The purpose is diagnostic safety for all later phases.
+
+## 6.1 Split startup into explicit stages
+
+Recommended categories:
+
+```text
+MODULE_LOAD
+INTEGRATION
+DATABASE_OPEN
+DATABASE_REPAIR
+HYDRATION
+UI_INIT
+```
+
+Exact enum names can differ, but failures must no longer all report as storage-open failures.
+
+## 6.2 Keep original exceptions
+
+Each stage should:
+
+```text
+console.error(stage, originalError)
+```
+
+and show a concise user-facing message appropriate to that stage.
+
+Examples:
+
+```text
+MODULE_LOAD
+"A required application module could not be loaded."
+
+INTEGRATION
+"Application modules loaded, but one integration is incomplete."
+
+DATABASE_OPEN
+"TodoListDB could not be opened. Existing data was not cleared."
+
+DATABASE_REPAIR
+"Stored data could not be repaired safely. Existing data was not cleared."
+
+HYDRATION
+"Stored data could not be loaded into the application."
+
+UI_INIT
+"Data loaded, but the interface could not finish starting."
+```
+
+## 6.3 Do not combine this with ES-module conversion
+
+This phase should make the **current** loader safer first.
+
+### Phase 1 verification
+
+- missing dynamic module maps to module/integration error, not database error;
+- IndexedDB open failure maps to database-open error;
+- hydration failure maps to hydration error;
+- underlying error remains visible in console;
+- no data is cleared on startup failure.
+
+---
+
+# 7. Phase 2 — Build the Runtime Ownership / Parity Inventory
+
+Before removing patches, record the final current behavior of every mutation command.
+
+This becomes the migration checklist and prevents lost semantics.
+
+At minimum inventory:
+
+| Command | Current UI caller/owner | Current runtime shadow/final implementation | Service / persistence path | Important memory/render behavior |
+|---|---|---|---|---|
+| Task checkbox | `task-renderer.js` | `ui-persistence-bindings.js` clones/rebinds checkbox | `AppDataService.toggleTaskStatus` | rollback checkbox on failure, refresh |
+| Task create/edit | `tasks.js` | persistence binding replaces submit | `createTask` / `updateTask` | disable submit, keep form on error |
+| Subtask create/edit | `subtask-editor.js` | persistence binding replaces submit | `createTask` / `updateTask` | preserve parent/project semantics |
+| Task Link/Unlink/Delete | `task-actions.js` | persistence binding replaces handlers | hierarchy/delete services | confirm parent-family delete, refresh |
+| Task hierarchy drag | `task-drag-commit.js` | persistence binding replaces commit | `commitHierarchyDrag` | custom sort setting, rerender |
+| Project create/edit/delete | Project sidebar owner | persistence binding replaces save/delete | taxonomy service | filter/view/count synchronization |
+| Tag create/edit/delete | Tag sidebar owner | persistence binding replaces save/delete | taxonomy service | task picker/count synchronization |
+| Taxonomy drag | sidebar taxonomy drag modules | service-side taxonomy drag | taxonomy-drag service | recursive order/parent persistence |
+| Sort/Group settings | `workspace-controls.js` | persistence binding replaces handlers | `setSetting` | AppState.settings + render |
+| Project/Tag viewType | `workspace-controls.js` | persistence binding replaces `setViewType` | `setEntityViewType` | per-entity view persistence |
+| Custom reminder save/delete | Schedule reminder code | persistence binding replaces methods | reminder-definition persistence | selected reminders + relation cleanup |
+| Repeat task completion | Task checkbox command | `data-service-repeat.js` replaces base completion | Repeat aggregate transactions | recurrence family semantics |
+| Repeat mapping/build | storage/service base files | `repeat-storage.js` replaces methods | mappers + task aggregate | series/anchor/familySlot state |
+
+During implementation, expand this inventory if another final runtime override is discovered.
+
+### Ownership inventory gate
+
+Do not delete a runtime patch method until its row in the inventory has:
+
+```text
+new owner
+new direct service path
+stores affected
+post-transaction memory behavior
+refresh/render behavior
+error behavior
+manual acceptance cases
+```
+
+---
+
+# 8. Phase 3 — Remove `ui-persistence-bindings.js` Incrementally (#6)
+
+Use atomic slices. After each slice, the old override for that exact command must be removed **before testing**.
+
+## 8A — Task checkbox completion ownership
+
+### Owner
+
+```text
+js/components/task-renderer.js
+```
+
+### Required change
+
+Create the checkbox once with the real handler:
+
+```text
+change
+    ↓
+disable / remember requested state
+    ↓
+await AppDataService.toggleTaskStatus(task.id)
+    ↓ success
+refreshAfterTaskMutation()
+```
+
+On failure:
+
+```text
+restore previous checkbox state
+re-enable checkbox
+report persistence error
+```
+
+Remove the checkbox clone/replacement override from `ui-persistence-bindings.js` in the same milestone.
+
+### Verify
+
+- plain root complete/uncomplete;
+- plain subtask complete/uncomplete;
+- repeating root completion;
+- repeating subtask completion;
+- parent completion family behavior;
+- failed write restores checkbox;
+- refresh preserves result.
+
+---
+
+## 8B — Main Task + Subtask submit ownership
+
+### Owners
+
+```text
+js/components/tasks.js
+js/components/subtask-editor.js
+```
+
+### Required direct behavior
+
+Main Task:
+
+```text
+editing → AppDataService.updateTask
+new root → AppDataService.createTask({ parentTaskId: null })
+```
+
+Subtask:
+
+```text
+editing → AppDataService.updateTask
+new child → AppDataService.createTask({ parentTaskId })
+```
+
+Preserve:
+
+```text
+submit disabled while awaiting write
+modal/form remains open on failure
+payload keeps date/time/reminders/repeat/project/priority/tags
+Subtask Project remains inherited/locked
+render only after successful write
+```
+
+Remove both submit overrides from `ui-persistence-bindings.js` in the same milestone.
+
+---
+
+## 8C — Task action ownership
+
+### Owner
+
+```text
+js/components/task-actions.js
+```
+
+Implement real async handlers directly:
+
+```text
+Link   → AppDataService.linkTaskToParent
+Unlink → AppDataService.unlinkTask
+Delete → AppDataService.deleteTaskFamily
+```
+
+Preserve:
+
+- completed tasks are not eligible parents;
+- root with children cannot be linked as child until hierarchy rule allows it;
+- family delete confirmation text/behavior;
+- action menus close at correct time;
+- error leaves durable state unchanged;
+- refresh after successful mutation.
+
+Remove Link/Unlink/Delete overrides immediately.
+
+---
+
+## 8D — Workspace settings/view ownership
+
+### Owner
+
+```text
+js/components/workspace-controls.js
+```
+
+Move final persistence behavior into the component:
+
+```text
+init
+    reads AppState.settings
+
+sort/group changes
+    await AppDataService.setSetting
+    update local component state after success
+    sync UI + render
+
+sort direction
+    await AppDataService.setSetting('sortDirection', next)
+
+Project/Tag viewType
+    await AppDataService.setEntityViewType(...)
+```
+
+Preserve:
+
+- `custom` sort disables direction;
+- Group By options;
+- Project/Tag saved viewType;
+- Timeline disabled;
+- error leaves old setting/view active.
+
+Remove all Workspace overrides from the patch in the same milestone.
+
+---
+
+## 8E — Task drag commit ownership
+
+### Owner
+
+```text
+js/components/task-drag-commit.js
+```
+
+Make the real commit path explicit:
+
+```text
+drag preview
+    ↓
+AppDataService.commitHierarchyDrag(...)
+    ↓ success
+WorkspaceControls.sortKey = custom
+sync UI
+cleanup + render
+```
+
+Preserve hierarchy service semantics from:
+
+```text
+js/storage/data-service-hierarchy.js
+```
+
+including:
+
+```text
+Link/Unlink validation
+root/subtask movement
+sibling resequencing
+familySlotId changes
+Project inheritance
+Group By metadata moves
+Repeat re-anchoring when Date group changes
+sortKey persistence to custom
+```
+
+Remove the `TasksComponent.commitTaskDrag` patch immediately.
+
+### `data-service-drag.js` audit
+
+There is also an older/root-oriented `AppDataService.commitTaskDrag` implementation.
+
+Do not delete it merely because it looks old.
+
+First perform a repository/reference audit proving it has no active caller/final ownership. If unused, remove it in the final dead-code phase or in this milestone with evidence.
+
+---
+
+## 8F — Project/Tag save/delete ownership
+
+Initially migrate persistence into the current Project/Tag UI owners before doing the duplication consolidation.
+
+Why:
+
+> First make current source ownership truthful; then refactor duplication. Do not combine persistence ownership migration and generic-UI redesign in one risky change.
+
+Project direct commands:
+
+```text
+createProject
+updateProject
+deleteProject
+```
+
+Tag direct commands:
+
+```text
+createTag
+updateTag
+deleteTag
+```
+
+Preserve:
+
+```text
+save button disabled while writing
+form remains usable on failure
+parent hierarchy validation
+render Projects/Tags after success
+Task Project/Tag picker refresh
+current filter repair/sync
+counts refresh
+Task rerender
+```
+
+Remove Project/Tag save/delete overrides immediately after direct owner behavior is installed.
+
+---
+
+## 8G — Custom reminder command ownership + Problem #10 foundation
+
+Do not leave reminder persistence as the final hidden patch.
+
+Create a focused service module, recommended:
+
+```text
+js/storage/data-service-reminders.js
+```
+
+Move from `data-service-taxonomy.js`:
+
+```text
+saveReminderDefinition
+deleteReminderDefinition
+```
+
+Then make Schedule call those service methods directly.
+
+At this milestone also establish state-owned reminder definitions as described in Phase 5 below, so the UI patch can be removed completely rather than temporarily recreating the UI/data coupling.
+
+Remove:
+
+```text
+ScheduleComponent.submitCustomReminder override
+ScheduleComponent.deleteCustomReminder override
+```
+
+in the same milestone.
+
+---
+
+## 8H — Delete the runtime patch layer
+
+After 8A–8G:
+
+Static audit must prove `ui-persistence-bindings.js` no longer contains unique behavior.
+
+Then:
+
+```text
+delete js/storage/ui-persistence-bindings.js
+remove bindPersistentUiMutations call
+remove bootstrap load entry/reference
+```
+
+Search expectations:
+
+```text
+ui-persistence-bindings.js        gone
+bindPersistentUiMutations         zero production references
+persistent checkbox clone patch   zero references
+```
+
+Problem #6 is not complete until all of those are true and migrated commands are manually verified.
+
+---
+
+# 9. Phase 4 — Make Repeat Persistence and Completion Explicit (#7)
+
+This is the highest-risk logic migration. Treat it as a dedicated checkpoint.
+
+## 9.1 Make `mappers.js` the actual mapper source of truth
+
+`js/storage/mappers.js` must directly encode/decode:
+
+### Task row
+
+```text
+familySlotId
+```
+
+alongside existing Task fields.
+
+### Repeat row
+
+Directly persist:
+
+```text
+mode
+custom interval/unit/weekdays/monthDays/yearDates
 endType/endDate/endCount
+seriesId
+occurrenceNumber
+anchorDate
+anchorDay
+anchorMonth
 ```
 
-because IndexedDB object stores are not column-restricted.
+### Hydration contract
 
----
-
-# 4. Implementation Order — Do Not Big-Bang the Refactor
-
-Use this order:
+Do not use:
 
 ```text
-Phase 1  Establish explicit state/domain boundaries
-Phase 2  Make Repeat persistence/completion explicit
-Phase 3  Move reminder definitions into state/service ownership
-Phase 4  Move persistent behavior into owning UI components
-Phase 5  Delete ui-persistence-bindings.js
-Phase 6  Merge Project/Tag UI
-Phase 7  Make permanent markup static / remove duplicate HTML
-Phase 8  Convert to native ES modules
-Phase 9  Split bootstrap stages/error reporting
-Phase 10 Remove obsolete compatibility/dead modules and final audit
+repeat.__repeatState
 ```
 
-Why this order:
+as a hidden side channel.
 
-- remove hidden runtime behavior **before** changing the loader;
-- make the source files truthful first;
-- then ES-module conversion becomes mostly dependency wiring rather than simultaneous behavior reconstruction;
-- static markup cleanup should happen before final component imports so init code can target final DOM directly.
-
-Every phase should leave the application in a coherent state.
-
----
-
-# 5. Phase 1 — Reduce AppState to Read Model + Controlled State Synchronization
-
-## 5.1 Move seed data out of `state.js`
-
-Create a dedicated seed module, recommended:
+Use an explicit result shape, for example:
 
 ```text
-js/seed-data.js
+repeatFromRow(row)
+→ { repeat, repeatState }
 ```
 
-Move `AppSeedData` there.
+or an equivalent explicit mapper contract.
 
-`AppState` should not know first-run fixture/seed content.
-
-`AppPersistence.seedFirstRun()` imports/receives seed data directly.
+Then `taskFromRow()` receives the Repeat rule and state explicitly.
 
 ---
 
-## 5.2 Move Task normalization to a pure model helper
+## 9.2 Make task building explicitly Repeat-aware
 
-Create a small pure module, recommended:
+The real task-building implementation must directly preserve current semantics:
+
+```text
+normalize Repeat through RepeatEngine
+Repeat enabled + no due date → Today
+root familySlotId → null
+subtask familySlotId → preserve existing slot or create a stable slot
+same repeat pattern + same due date → preserve series/occurrence/anchor state
+changed repeat pattern/date → create fresh initial Repeat state/series
+Repeat removed → repeatState = null
+```
+
+There must not be a simpler base build method that is later replaced.
+
+---
+
+## 9.3 Make aggregate persistence explicitly Repeat-aware
+
+The real `writeTaskAggregate()` path directly writes/removes:
+
+```text
+tasks
+task_tags
+reminder_definitions
+task_reminders
+task_repeat_rules
+```
+
+using the explicit Repeat mapper/state.
+
+There must be one aggregate writer contract.
+
+---
+
+## 9.4 Preserve Repeat repair as an explicit startup/service operation
+
+Repair behavior must preserve:
+
+```text
+missing subtask familySlotId → generate
+repeating task without due date → Today
+missing/legacy Repeat series state → recreate safely
+preserve existing valid series where possible
+persist repaired Task/Repeat rows transactionally
+```
+
+Place the repair function in an explicit Repeat/service/persistence module; do not add it by monkey-patching a service object after load.
+
+---
+
+## 9.5 Make completion recurrence the one real completion command
+
+Recommended focused module:
+
+```text
+js/storage/data-service-completion.js
+```
+
+It should define the actual completion command used by `AppDataService`, not wrap/replace another completion implementation later.
+
+Preserve **exact current semantics**:
+
+### Uncomplete completed occurrence
+
+```text
+completed occurrence → active historical occurrence
+no new recurrence generation
+```
+
+### Plain Subtask completion
+
+```text
+mark that child complete only
+```
+
+### Repeating Subtask completion
+
+```text
+old child completes
+old child loses Repeat ownership
+next child occurrence is created immediately
+same parent
+same stable familySlotId
+next occurrenceNumber/series/anchor semantics preserved
+```
+
+### Plain root completion
+
+```text
+root + current children complete as a family
+child Repeat execution is suppressed when completion is parent-triggered
+```
+
+### Repeating root completion
+
+```text
+old root family completes
+old root loses Repeat ownership
+next root occurrence created immediately
+child templates cloned into next family
+familySlotId preserves logical child slots
+active Repeat owner preferred for a slot
+child Repeat ownership transferred correctly
+```
+
+### Repeat end reached
+
+```text
+complete old occurrence/family
+create no next occurrence
+remove Repeat ownership where current behavior does so
+```
+
+### Calendar anchor behavior
+
+Preserve:
+
+```text
+monthly fallback to last valid day
+return to anchor day when later month allows it
+yearly/leap-date behavior
+custom week/month/year intervals
+end date inclusive semantics
+After N = total occurrence-count semantics
+```
+
+---
+
+## 9.6 Atomic Repeat patch removal
+
+Once explicit mapper/build/write/repair/completion behavior is installed:
+
+```text
+delete js/storage/repeat-storage.js
+delete js/storage/data-service-repeat.js
+remove both bootstrap references
+remove any method-decoration/install code
+```
+
+**Do this before Repeat parity testing.**
+
+Otherwise tests may still exercise the old patch.
+
+Static expectations:
+
+```text
+repeat-storage.js       gone
+data-service-repeat.js  gone
+__repeatState           zero references
+one task completion implementation
+one Repeat mapper implementation
+```
+
+---
+
+# 10. Phase 5 — Complete Reminder Data Ownership Cleanup (#10)
+
+This phase may begin in 8G because reminder persistence must be unshadowed atomically. Complete the ownership cleanup here.
+
+## 10.1 State owns hydrated reminder definitions
+
+Add:
+
+```text
+AppState.reminderDefinitions
+```
+
+or equivalent read-model storage.
+
+Hydration must pass reminder definitions into the state snapshot.
+
+Remove direct hydration writes to:
+
+```text
+ScheduleComponent.customReminders
+```
+
+## 10.2 Schedule derives custom reminder UI from state
+
+Schedule should read current custom definitions from AppState and map them to UI values.
+
+It may expose a small selector/helper such as:
+
+```text
+getCustomReminderDefinitions()
+```
+
+but Schedule must not be the durable owner.
+
+## 10.3 `AppDataService.resolveReminders()` cannot read UI components
+
+Replace:
+
+```text
+ScheduleComponent.customReminders.find(...)
+```
+
+with state/reminder-domain lookup.
+
+Unknown custom reminder IDs should still be validated safely.
+
+## 10.4 Dedicated reminder service responsibility
+
+Keep reminder definition commands outside taxonomy service:
+
+```text
+saveReminderDefinition
+deleteReminderDefinition
+```
+
+Preserve delete semantics:
+
+```text
+custom definition removed
+all task_reminders relations using it removed
+affected in-memory Task.reminders remove the ID
+empty reminder list falls back to ['none']
+Schedule refreshes from updated state
+```
+
+Do not build a large `ReminderModel` abstraction unless a small pure mapper/helper is genuinely useful.
+
+### Static gate
+
+Search storage/data-service modules for:
+
+```text
+ScheduleComponent
+```
+
+Expected after Problem #10:
+
+```text
+zero data-layer references to ScheduleComponent
+```
+
+---
+
+# 11. Phase 6 — Reduce AppState Write Surface Safely (#8)
+
+Do this **after** the UI persistence patch and Repeat monkey-patches are gone.
+
+The purpose is not to introduce layers for aesthetics. The purpose is to make AppState a truthful read model rather than a second write service.
+
+## 11.1 Move Task normalization to a pure boundary helper
+
+Recommended:
 
 ```text
 js/task-model.js
 ```
 
-Move the normalization contract currently implemented by:
-
-```text
-AppState.normalizeTask()
-```
-
-into a pure function such as:
+with a pure:
 
 ```text
 normalizeTask(task)
 ```
 
-Consumers:
+Use it at controlled boundaries:
 
 ```text
-AppPersistence hydration
-AppDataService buildTask
-storage mapper hydration where appropriate
-UI read normalization only if genuinely necessary
+hydration
+task build/update
+mapper/state synchronization
 ```
 
-Normalization should occur at boundaries, not during selectors/rendering.
+Do not normalize/rebuild the entire live Task array during a selector/render call.
 
-Remove:
+If this naturally fixes tracker Problem #19, do **not** mark #19 complete unless its own behavior is separately reviewed/verified.
+
+## 11.2 Seed separation is optional
+
+Moving `AppSeedData` to:
 
 ```text
-AppState.normalizeAllTasks()
+js/seed-data.js
 ```
 
-and do not allow read selectors to recreate `AppState.tasks`.
+is reasonable but not a prerequisite for Problem #8.
 
-This architecture change naturally makes read paths safer; it is required by Problem #8 even though selector side effects are also tracked separately as Problem #19.
+Do it only if it makes the final module ownership clearer.
 
-Do not mark Problem #19 complete under this plan unless its own acceptance behavior is verified.
+## 11.3 Controlled memory synchronization
 
----
+A separate public `AppStateStore` object is **optional**.
 
-## 5.3 Separate AppState from AppStateStore
+Required invariant:
 
-Recommended final pattern in `js/state.js`:
+> Only controlled post-transaction code may mutate the hydrated domain arrays/settings.
+
+Acceptable implementation options:
 
 ```text
-AppState
-    read model exposed to UI/selectors
-
-AppStateStore
-    controlled in-memory write adapter used by persistence/services
+small AppStateStore adapter
+or
+small internal state-sync functions used by AppDataService/persistence
 ```
 
-`AppState` should hold:
+Do not create a large abstraction that merely renames direct assignments.
 
-```text
-projects
-tags
-tasks
-reminderDefinitions
-settings
-currentFilter
-currentFilterType
-theme/sidebar UI state if still needed
-```
-
-`AppState` may expose basic reads such as:
-
-```text
-getProject(id)
-getTag(id)
-getTask(id)
-```
-
-Do not keep domain CRUD methods such as:
-
-```text
-addProject
-updateProject
-deleteProject
-addTag
-updateTag
-deleteTag
-addTask
-updateTask
-toggleTaskStatus
-deleteTask
-```
-
-UI components must never call those methods after this phase.
-
-`AppStateStore` should provide only state synchronization primitives used after successful persistence, for example:
+Useful primitives may include:
 
 ```text
 hydrate(snapshot)
-replaceTasks(tasks)
-upsertTask(task)
-removeTaskIds(ids)
-replaceProjects(projects)
-upsertProject(project)
-removeProject(id)
-replaceTags(tags)
-upsertTag(tag)
-removeTag(id)
-replaceReminderDefinitions(definitions)
-upsertReminderDefinition(definition)
-removeReminderDefinition(id)
-setSetting(key, value)
+upsert/remove Task(s)
+upsert/remove Project
+upsert/remove Tag
+replace/upsert/remove reminder definitions
+setSetting
+replace/resequence Task scope
 ```
 
-These are not domain commands. They mirror already-committed persistent state into memory.
+## 11.4 Refactor `task-relations.js`
 
----
+It should become read/validation logic, not a mutation override layer.
 
-## 5.4 Refactor `task-relations.js` to read/domain helpers only
-
-Remove the current base-method capture pattern:
-
-```text
-baseAddTask
-baseUpdateTask
-baseDeleteTask
-baseDeleteProject
-```
-
-Remove its AppState mutation overrides.
-
-Keep/rework only relation logic such as:
+Keep useful reads such as:
 
 ```text
 getTask
@@ -737,741 +1344,194 @@ getRootTasks
 validateParentTaskId
 ```
 
-These may be exported as pure/read helpers and consumed by AppDataService/UI.
+Move write behavior to AppDataService/hierarchy service.
 
-Project propagation and deletion behavior belongs in AppDataService transactions, not AppState overrides.
+Remove the pattern of capturing base AppState CRUD methods and replacing them.
 
----
+## 11.5 Refactor `task-order.js`
 
-## 5.5 Refactor `task-order.js` to ordering calculations, not state mutation
-
-Keep useful reads/calculations:
+Keep ordering calculations/helpers where useful:
 
 ```text
 getSiblingTasks
 getSiblingTaskIds
-root order calculations
-relative insertion calculations
+root/sibling ordering calculations
 ```
 
-Move mutation functions such as resequencing/rebasing snapshots into AppDataService hierarchy/drag planning or make them pure functions that return the new order without mutating AppState.
+Move durable mutation ownership to AppDataService hierarchy/drag commands.
 
-Rule:
+If in-memory resequencing helpers remain, they should be controlled synchronization helpers, not public UI domain commands.
 
-> Order helpers calculate. AppDataService persists. AppStateStore mirrors the persisted result.
+## 11.6 AppState mutation API removal gate
+
+Only remove these after repository search proves no production caller remains:
+
+```text
+AppState.addTask
+AppState.updateTask
+AppState.deleteTask
+AppState.toggleTaskStatus
+AppState.addProject
+AppState.updateProject
+AppState.deleteProject
+AppState.addTag
+AppState.updateTag
+AppState.deleteTag
+```
+
+Also audit for equivalent aliases captured in closures.
+
+### Expected final AppState responsibility
+
+```text
+hydrated Projects/Tags/Tasks/reminderDefinitions/settings
+current filter/navigation read/UI state
+basic entity lookup
+read-only selectors/count helpers
+```
+
+Hierarchy/order/domain writes belong elsewhere.
 
 ---
 
-# 6. Phase 2 — Make Repeat Persistence and Completion Explicit
+# 12. Phase 7 — Consolidate Project/Tag UI with Shared Core + Thin Wrappers (#9)
 
-## 6.1 Fold Repeat fields into the real mappers
+Do this after Project/Tag persistence ownership is already truthful.
 
-Update `js/storage/mappers.js` directly.
-
-### `taskToRow(task)` must explicitly include
+## 12.1 Recommended structure
 
 ```text
-familySlotId
+js/components/sidebar-taxonomy-core.js
+js/components/sidebar-projects.js   thin Project config/wrapper
+js/components/sidebar-tags.js       thin Tag config/wrapper
 ```
 
-### `taskFromRow(...)` must explicitly restore
+Deleting the wrapper files is optional.
+
+## 12.2 Shared core responsibilities
+
+Centralize duplicated behavior such as:
 
 ```text
-familySlotId
-repeat
-repeatState
+render recursive taxonomy tree
+build common node shell
+populate icon state
+populate parent select from TaxonomyOrder
+apply view-type state
+open create/edit modal common lifecycle hooks
+save command common async/error pattern
+delete command common async/error pattern
+close common modal state
+refresh affected sidebar/task UI
 ```
 
-### `repeatToRow(taskId, repeat, repeatState)` must explicitly write
+## 12.3 Configuration remains explicit
+
+Project config should explicitly define things like:
 
 ```text
-mode/custom pattern
-endType
-endDate
-endCount
-seriesId
-occurrenceNumber
-anchorDate
-anchorDay
-anchorMonth
-updatedAt
+entityType = project
+labels: Project / Sub-project
+ID/dataset names
+Project-specific DOM references
+Project getter/service commands
 ```
 
-### `repeatFromRow(row)`
-
-Do not attach hidden state to the Repeat object.
-
-Preferred explicit result:
-
-```js
-{
-  repeat,
-  repeatState
-}
-```
-
-or an equivalent clear structure.
-
-Hydration then passes both values directly into the task model.
-
-Remove the non-enumerable:
+Tag config should explicitly define:
 
 ```text
-__repeatState
+entityType = tag
+labels: Tag / Sub-tag
+ID/dataset names
+Tag-specific DOM references
+Tag getter/service commands
 ```
 
-transport entirely.
-
----
-
-## 6.2 Make `AppDataService.buildTask()` Repeat-aware directly
-
-Move the behavior currently installed by `repeat-storage.js` into the real task-building implementation:
+Avoid a giant core filled with scattered:
 
 ```text
-normalize repeat rule
-Repeat mode != none + no dueDate → use Today
-root task → familySlotId null
-subtask → preserve/existing slot or allocate slot
-same Repeat pattern + same dueDate → preserve repeatState
-changed Repeat pattern/date → initialize new series state
-Repeat none → repeatState null
+if (type === 'project') ... else ...
 ```
 
-The function visible in the real service source must already be the final implementation.
+Use small configuration-driven differences.
 
----
+## 12.4 Reuse existing service-side taxonomy architecture
 
-## 6.3 Make `writeTaskAggregate()` Repeat-aware directly
+`data-service-taxonomy-drag.js` already has useful Project/Tag generic service logic.
 
-The real aggregate writer must persist:
+Do not duplicate drag ordering/cycle rules in the new UI core.
+
+Keep:
 
 ```text
-TASKS
-TASK_TAGS
-REMINDER_DEFINITIONS
-TASK_REMINDERS
-TASK_REPEAT_RULES
+TaxonomyOrder
+service-side taxonomy drag
 ```
 
-using the explicit Repeat mapper.
+as hierarchy/order authorities.
 
-No later replacement.
+## 12.5 Preserve behavior
 
----
-
-## 6.4 Move completion behavior to an explicit completion module
-
-Recommended file:
+Regression requirements:
 
 ```text
-js/storage/data-service-completion.js
-```
-
-Export the final recurrence-aware `toggleTaskStatus` implementation plus private helpers.
-
-Preserve the exact existing cases from `data-service-repeat.js`:
-
-```text
-uncompleteTask
-completePlainSubtask
-completeRepeatingSubtask
-completeNonRepeatingRoot
-finishRepeatingRootWithoutNext
-completeRepeatingRoot
-chooseSlotTemplates
-nextState
-```
-
-The main `AppDataService` must explicitly import/include this method. It must not first define a simpler `toggleTaskStatus()` and then replace it.
-
-Delete the simple duplicate completion implementation from the base service.
-
----
-
-## 6.5 Make Repeat repair explicit
-
-Move `repairRepeatState()` into a clearly imported service module, e.g. the completion/repeat service.
-
-Preserve repair behavior:
-
-```text
-subtask missing familySlotId → allocate slot
-repeating task missing dueDate → Today
-missing/incomplete repeatState → recreate anchors/series state
-persist repaired TASKS + TASK_REPEAT_RULES
-```
-
-No DB schema change.
-
----
-
-## 6.6 Delete Repeat patch files only after parity review
-
-After direct implementations are complete and statically compared against current behavior, delete:
-
-```text
-js/storage/repeat-storage.js
-js/storage/data-service-repeat.js
-```
-
-Do not delete them first and attempt to reconstruct behavior from memory.
-
----
-
-# 7. Phase 3 — Make Reminder Definitions State/Service Data
-
-## 7.1 Add reminder definitions to hydration snapshot
-
-`AppPersistence.hydrateState()` already reads:
-
-```text
-reminder_definitions
-```
-
-Instead of assigning custom reminders into ScheduleComponent, include reminder definitions in the AppState hydration snapshot:
-
-```text
-AppStateStore.hydrate({
-  projects,
-  tags,
-  tasks,
-  reminderDefinitions,
-  settings
-})
-```
-
-Remove:
-
-```text
-ScheduleComponent.customReminders = ...
-```
-
-from persistence.
-
-Persistence must never know ScheduleComponent.
-
----
-
-## 7.2 Introduce a pure reminder model helper
-
-Recommended:
-
-```text
-js/reminder-model.js
-```
-
-Move/share pure reminder concerns there:
-
-```text
-BUILTIN_REMINDERS
-custom parts → persisted definition
-persisted definition → UI parts (day/hr/min)
-validation/ID format helpers
-```
-
-This avoids forcing UI code to depend on a storage-specific mapper simply to interpret minutes.
-
-Storage mappers may call the same pure helper.
-
----
-
-## 7.3 Change `resolveReminders()` to read AppState, not Schedule
-
-Current invalid dependency:
-
-```text
-AppDataService → ScheduleComponent.customReminders
-```
-
-New behavior:
-
-```text
-AppDataService.resolveReminders(ids)
-    ↓
-validate built-in IDs
-validate custom IDs against AppState.reminderDefinitions
-or parse a valid custom ID if a new definition is being submitted in the same command
-```
-
-No UI component access.
-
----
-
-## 7.4 Make reminder definition service methods synchronize AppState
-
-After successful DB write:
-
-```text
-saveReminderDefinition
-    → AppStateStore.upsertReminderDefinition
-
-deleteReminderDefinition
-    → delete DB definition + task relations
-    → remove ID from affected tasks in memory
-    → AppStateStore.removeReminderDefinition
-```
-
-The service remains responsible for transaction correctness.
-
----
-
-## 7.5 Schedule reads custom reminder options from AppState
-
-Remove ScheduleComponent's long-lived authoritative:
-
-```text
-customReminders: []
-```
-
-or convert it to a derived getter, not an independently mutated store.
-
-`renderReminderMenuContent()` and `updateReminderUI()` should derive custom options from:
-
-```text
-AppState.reminderDefinitions
-```
-
-through the pure ReminderModel helper.
-
-`draftReminders` remains local Schedule draft state.
-
----
-
-# 8. Phase 4 — Move Persistent UI Commands Into Their Owning Files
-
-This phase directly replaces every responsibility currently hidden in `ui-persistence-bindings.js`.
-
-Use one shared UI error helper instead of using `AppPersistence` as a general-purpose UI error service.
-
-Recommended module:
-
-```text
-js/ui-error.js
-```
-
-API example:
-
-```text
-UiError.show(message, error)
-```
-
-It may preserve the existing non-destructive bottom error banner appearance.
-
----
-
-## 8.1 Task checkbox
-
-In `task-renderer.js`, create the checkbox with the final handler immediately:
-
-```text
-change
-→ disable checkbox
-→ await AppDataService.toggleTaskStatus(task.id)
-→ refreshAfterTaskMutation()
-→ on failure restore visual state + report error
-```
-
-Delete the clone-and-replace checkbox decoration currently in `ui-persistence-bindings.js`.
-
-There should be exactly one checkbox listener.
-
----
-
-## 8.2 Main Task submit
-
-`TasksComponent.submitTask()` becomes the real async implementation:
-
-```text
-validate title
-build payload
-button disabled
-createTask/updateTask via AppDataService
-on success close + render
-on failure keep modal/draft open
-finally enable button
-```
-
-No direct AppState Task mutation.
-
----
-
-## 8.3 Subtask submit
-
-`SubtaskEditorComponent.submit()` becomes the real async implementation:
-
-```text
-create/update via AppDataService
-parentTaskId supplied on create
-keep form open on failure
-refresh after success
-```
-
-No direct AppState Task mutation.
-
----
-
-## 8.4 Task actions
-
-In `task-actions.js`, replace placeholder/direct-state implementations with the real service commands:
-
-```text
-handleTaskActionLinkParent → AppDataService.linkTaskToParent
-handleTaskActionUnlink     → AppDataService.unlinkTask
-handleTaskActionDelete     → AppDataService.deleteTaskFamily
-```
-
-Preserve confirmation for parent family deletion.
-
-Do not leave empty methods that another file is expected to fill.
-
----
-
-## 8.5 Project/Tag save/delete
-
-The owning taxonomy UI layer must directly call:
-
-```text
-AppDataService.createProject/updateProject/deleteProject
-AppDataService.createTag/updateTag/deleteTag
-```
-
-Preserve:
-
-```text
-submit disabled during write
-form stays open on write failure
-sidebar rerender after success
-Task Project/Tag picker rerender after success
-current filter synchronization
-count refresh
-Task view rerender
-```
-
-These will move into the shared taxonomy UI in Phase 6, but persistence must already be part of the owner behavior.
-
----
-
-## 8.6 Workspace Controls
-
-`WorkspaceControls.init()` reads persisted values directly from:
-
-```text
-AppState.settings
-```
-
-from the beginning.
-
-The real handlers become async:
-
-```text
-Sort key       → AppDataService.setSetting('sortKey', value)
-Sort direction → AppDataService.setSetting('sortDirection', value)
-Group key      → AppDataService.setSetting('groupKey', value)
-Project/Tag view type → AppDataService.setEntityViewType(...)
-```
-
-Do not keep a nonpersistent implementation that another file replaces.
-
-Preserve current UI behavior if a write fails: keep previous setting and show an error.
-
----
-
-## 8.7 Task hierarchy drag commit
-
-`TaskDragCommitMethods.commitTaskDrag()` must directly contain the current persistent commit behavior:
-
-```text
-if preview unchanged → cleanup only
-else await AppDataService.commitHierarchyDrag(...)
-set Sort = Custom after successful commit
-cleanup/render
-```
-
-No runtime replacement.
-
-Review `js/storage/data-service-drag.js` after this migration. The older `AppDataService.commitTaskDrag()` path appears superseded by `commitHierarchyDrag()`.
-
-If static reference review confirms no remaining caller, delete `data-service-drag.js` rather than carrying a second obsolete drag persistence path.
-
----
-
-## 8.8 Custom Reminder create/delete
-
-`ScheduleTimeReminderMethods.submitCustomReminder()` and `deleteCustomReminder()` become async real commands:
-
-```text
-submit → AppDataService.saveReminderDefinition
-       → state updated by service
-       → toggle selection/render
-
-delete → AppDataService.deleteReminderDefinition
-       → state updated by service
-       → remove from draft selection/render
-```
-
-Do not mutate a separate Schedule authoritative reminder array.
-
----
-
-# 9. Phase 5 — Delete `ui-persistence-bindings.js`
-
-Only after every overridden behavior above is migrated and reviewed:
-
-1. remove `bindPersistentUiMutations()` call from startup;
-2. remove `js/storage/ui-persistence-bindings.js` from loading/imports;
-3. delete the file;
-4. statically verify there are no UI component methods intentionally left as AppState-only placeholders.
-
-Required source invariant:
-
-> Searching the repository should not reveal code that exists only to replace a previously defined UI method at startup.
-
----
-
-# 10. Phase 6 — Merge Project/Tag Sidebar + Modal UI
-
-Create one shared component/helper, recommended:
-
-```text
-js/components/sidebar-taxonomy.js
-```
-
-Delete the mirrored implementation from:
-
-```text
-sidebar-projects.js
-sidebar-tags.js
-```
-
-after parity is confirmed.
-
----
-
-## 10.1 Define one taxonomy UI config
-
-Use a configuration object for the small differences.
-
-Conceptual shape:
-
-```js
-project: {
-  type: 'project',
-  singular: 'Project',
-  childLabel: 'Sub-project',
-  list: projectListEl,
-  modal: projectModal,
-  nameInput: projectNameInput,
-  iconTrigger: projectIconTrigger,
-  iconPicker: projectIconPicker,
-  parentSelect: projectParentSelect,
-  title: projectModalTitle,
-  saveButton: projectSaveBtn
-}
-
-tag: {
-  type: 'tag',
-  singular: 'Tag',
-  childLabel: 'Sub-tag',
-  ...
-}
-```
-
-Do not hide major behavior inside arbitrary conditionals scattered throughout the file.
-
----
-
-## 10.2 Shared tree renderer
-
-One recursive renderer should:
-
-```text
-TaxonomyOrder.getChildren(type, parentId)
-create .sidebar-tree-node
-set data-taxonomy-type/entity-id/parent-id/depth
-create selectable row
-create count
-create More menu
-create child host
-recurse
-```
-
-Preserve compatibility hooks needed by existing CSS/filter/drag code:
-
-```text
-project-tree-node / tag-tree-node
-project-nav-item / tag-nav-item
-data-project / data-tag
-data-project-id / data-tag-id
-project-more-menu / tag-more-menu
-```
-
-They may be generated from config even though implementation is shared.
-
-Do not break taxonomy drag DOM contracts.
-
----
-
-## 10.3 Shared modal population
-
-One open function should handle:
-
-```text
-create vs edit title/button text
-icon state
-name
-view type
-parent hierarchy options
-exclude self/descendants
-initial parent for Add Sub-project/Sub-tag
-```
-
-Use TaxonomyOrder for hierarchy ordering.
-
-Keep Project/Tag-specific labels through config.
-
-If Implementation Plan ID 13 has already introduced a shared ModalFocusManager by the time this plan is implemented, the shared taxonomy controller must preserve/use that lifecycle. If ID 13 has not yet been implemented, this plan must not silently redesign modal focus; preserve current focus behavior and leave Problem #2 open.
-
----
-
-## 10.4 Shared save/delete commands
-
-One internal flow can branch by type only at the service API boundary:
-
-```text
-project → createProject/updateProject/deleteProject
-tag     → createTag/updateTag/deleteTag
-```
-
-Optionally make the data service itself use generic internal taxonomy create/update/delete helpers while preserving clear public wrappers.
-
----
-
-## 10.5 Shared Sidebar event delegation
-
-Replace duplicated Project and Tag delegated click blocks with one taxonomy event resolver where practical.
-
-Required actions:
-
-```text
-select entity filter
-open More menu
+recursive Project hierarchy
+recursive Tag hierarchy
+create/edit/delete
 add child
-edit
-delete
+parent picker
+viewType
+sidebar counts
+current filter sync/repair
+mouse/touch taxonomy drag
+indent/outdent
+move between parents
+cycle prevention
+sortOrder persistence
+ID 16 safe text rendering
+ID 17 Subtask Tag ordering
 ```
 
-Preserve current behavior and wording.
+Success condition:
+
+> duplicated behavior has one shared implementation; Project/Tag-specific configuration remains understandable.
 
 ---
 
-# 11. Phase 7 — Make Permanent Markup the Source of Truth
+# 13. Phase 8 — One-Source UI Markup Cleanup (#13 and #14)
 
-Rule:
+Use this rule:
 
-> Static application shell/control structure belongs in `index.html`. Dynamic data rows belong in JavaScript.
+> **Every structure has one authoritative owner/source of truth and correct semantics/accessibility when interactive. Component-generated DOM is valid when the component is its only owner.**
 
-Do not move data-driven task/project/tag/calendar rows into HTML.
+Do not force all permanent DOM into `index.html`.
 
----
+## 13.1 Completed section header
 
-## 11.1 Workspace main menu
+This is a stable control and should start as the correct semantic button.
 
-Replace the obsolete Sort/Group/View HTML in `index.html` with the **actual current layered menu structure** that the app wants:
-
-```text
-View switcher
-Sort & Group trigger
-```
-
-Then remove:
-
-```text
-WorkspaceControls.buildLayeredMenu()
-```
-
-`WorkspaceControls.init()` should query the existing controls and bind behavior only.
-
----
-
-## 11.2 Workspace Sort & Group panel
-
-Because this is a permanent UI panel, place its structural markup in `index.html` as well.
-
-Remove runtime:
-
-```text
-createSortGroupPanel()
-optionChip() HTML generator
-```
-
-JS only opens/closes/positions/synchronizes the static panel.
-
----
-
-## 11.3 Task Project menu seed rows
-
-Change:
+Recommended static structure:
 
 ```html
-<div id="menu-project">
-  Personal
-  Work
-</div>
+<button type="button"
+        class="section-header-title completed-section-toggle"
+        aria-controls="completed-task-list"
+        aria-expanded="true">
+  ...
+</button>
 ```
 
-into an empty dynamic data container, equivalent to the Tag menu:
-
-```html
-<div class="context-menu" id="menu-project"></div>
-```
-
-`renderProjectMenu()` remains the single source for Project data rows.
-
----
-
-## 11.4 Completed section header
-
-Make the final semantic button exist in `index.html` from first paint:
-
-```text
-button.completed-section-toggle
-    label "Completed"
-    count
-    chevron
-```
-
-Give it the final:
-
-```text
-aria-controls="completed-task-list"
-aria-expanded
-aria-label
-```
-
-During `TasksComponent.init()` query:
-
-```text
-completedSectionToggle
-completedSectionChevron
-```
-
-Bind click once.
-
-Delete:
+Then remove runtime element replacement from:
 
 ```text
 ensureCompletedSectionToggle()
-header.replaceWith(...)
 ```
 
-`syncCompletedSectionState()` remains responsible for state updates only.
+Keep only binding/state synchronization logic.
 
----
+## 13.2 Task hierarchy action menu
 
-## 11.5 Task action menu permanent commands
-
-Add permanent static buttons for:
+Stable actions such as:
 
 ```text
 Add Subtask
@@ -1480,930 +1540,675 @@ Unlink
 Delete
 ```
 
-with correct roles/attributes.
+should have one owner.
 
-Then delete:
+Recommended: place the stable menu action buttons in the authoritative markup and remove runtime insertion by `ensureTaskHierarchyActionButtons()`.
+
+Dynamic visibility/disabled state remains JS responsibility.
+
+## 13.3 Task Project/Tag picker placeholders
+
+If JS always populates the Project/Tag pickers from current taxonomy state:
 
 ```text
-ensureTaskHierarchyActionButtons()
+remove hard-coded Personal/Work placeholder rows
+keep empty authoritative container
 ```
 
-The component only hides/disables the buttons based on the selected Task.
+Do not ship static sample items only to clear them immediately.
+
+## 13.4 Workspace menu
+
+Choose exactly one owner.
+
+Recommended for this stable permanent shell:
+
+```text
+final semantic menu/panel markup in index.html
+WorkspaceControls only binds/updates it
+```
+
+Then remove `buildLayeredMenu()` replacement behavior.
+
+If implementation instead chooses component-generated markup, remove the duplicate static version completely. Do not retain both.
+
+## 13.5 Repeat Ends UI
+
+The important requirement is one owner, not mandatory static HTML.
+
+Acceptable options:
+
+```text
+A. move stable Repeat Ends row/modal markup into index.html
+or
+B. keep it wholly owned/created once by ScheduleRepeatEnd component
+```
+
+In either case:
+
+```text
+load schedule-repeat-end.css normally from the document stylesheet list
+remove runtime stylesheet injection
+```
+
+Do not maintain both static and generated versions.
+
+## 13.6 Transient/data-driven DOM remains dynamic
+
+These are not problems simply because they are generated:
+
+```text
+Task cards
+Project/Tag tree rows
+calendar day cells
+parent picker options
+Tag/Project dynamic choices
+transient task parent picker
+```
+
+The problem is duplicate ownership/runtime replacement, not DOM APIs themselves.
 
 ---
 
-## 11.6 Repeat Ends structural UI
+# 14. Phase 9 — Isolated JavaScript Module/Bootstrap Cutover (#11)
 
-Move permanent Repeat Ends structure out of runtime creation and into `index.html`:
+Problem #11 remains part of ID 18 because the requested cleanup includes it, but it must be executed as an **isolated final milestone** after Problems #6–#10 and #12–#14 are stable.
 
-```text
-Ends row
-main Repeat validation message
-Repeat Ends modal
-end type wheel host
-conditional date panel
-conditional count panel
-error/status container
-footer buttons
-```
+Do not mix business-logic changes into this phase.
 
-Keep dynamic contents dynamic:
+## 14.1 Pre-cutover gate
+
+Before module conversion:
 
 ```text
-wheel items
-calendar day buttons
-labels/state
+full manual regression of current behavior
+all runtime persistence patches removed
+Repeat patches removed
+AppState write surface reduced
+reminder ownership clean
+Project/Tag shared core stable
+one-source markup cleanup complete
 ```
 
-`ScheduleRepeatEndMethods.initRepeatEndUi()` becomes a DOM-query/bind initializer rather than a DOM constructor.
+Create a clean Git rollback point.
 
-Add `css/components/schedule-repeat-end.css` as an explicit stylesheet link in `index.html`; remove the runtime link injection.
+## 14.2 Target loading model
 
-This does not by itself complete tracker Problem #27 because that problem also concerns other CSS dependencies.
-
----
-
-# 12. Phase 8 — Native ES Module Cutover
-
-Do this **after** runtime patch behavior has been removed, so module conversion is dependency cleanup rather than behavioral archaeology.
-
-No bundler/framework is required.
-
----
-
-## 12.1 Final HTML entry
-
-Remove the long classic `<script src="...">` list from `index.html`.
-
-Use one entry:
+Final `index.html` should have one application entry such as:
 
 ```html
 <script type="module" src="js/bootstrap.js"></script>
 ```
 
-Do not keep both the classic list and module graph in the final state.
+No long hand-sorted classic script list.
 
----
-
-## 12.2 `bootstrap.js`
-
-Create a very small module responsible for catching **module graph load failure**:
-
-```js
-try {
-  const { startApp } = await import('./app.js');
-  await startApp();
-} catch (error) {
-  ...
-}
-```
-
-Because `app.js` and all its static imports are behind this dynamic import, a missing/parse-failing dependency rejects the import and can be classified as a module-load failure rather than a database failure.
-
-Keep bootstrap independent of AppPersistence so it can report an error even when storage modules fail to import.
-
----
-
-## 12.3 Convert internal modules to named imports/exports
-
-Final internal modules should stop depending on load-order globals such as:
-
-```text
-window.AppState
-window.AppDataService
-window.TodoDb
-window.TodoRepositories
-window.TodoStorageMappers
-window.RepeatEngine
-window.TasksComponent
-window.SidebarComponent
-window.ScheduleComponent
-```
-
-Use explicit imports.
-
-Examples:
-
-```text
-AppDataService imports AppState/AppStateStore/TaskRelations/TaskOrder/RepeatEngine/DB/mappers
-TasksComponent imports its method modules + AppDataService + state reads
-SidebarComponent imports taxonomy UI + TaxonomyOrder + AppDataService
-ScheduleComponent imports RepeatEngine + ReminderModel + AppDataService + state
-```
-
-Do not rely on `Object.assign()` that occurs later because another script finally became available.
-
----
-
-## 12.4 Explicit component composition is allowed at definition time
-
-The codebase currently splits large components into method modules. Keep that modularity.
-
-It is acceptable to compose at module definition time, for example:
-
-```js
-export const TasksComponent = {
-  ...TaskMenuMethods,
-  ...TaskActionMethods,
-  ...TaskHierarchyMethods,
-  ...TaskDragMethods,
-  ...TaskDragHierarchyMethods,
-  ...TaskRendererMethods,
-  ...
-};
-```
-
-The important distinction is:
-
-```text
-GOOD:
-all imported methods are known while TasksComponent is created
-
-BAD:
-TasksComponent initializes, then unrelated later-loaded files replace methods
-```
-
-The same rule applies to Sidebar, Schedule, and AppDataService.
-
-Keep source modules reasonably small (generally under the project's ~300-line source guideline).
-
----
-
-## 12.5 Eliminate `BOOTSTRAP_SCRIPTS` and `loadScript()`
-
-Delete from `app.js`:
+No:
 
 ```text
 BOOTSTRAP_SCRIPTS
-loadScript()
-late integration Object.assign blocks
-manual required-method assertions that exist only because scripts load late
+loadScript() runtime injection
+late Object.assign installation onto live components
 ```
 
-ES imports become the dependency contract.
+## 14.3 Dependency direction
 
-Keep small runtime capability assertions only where they validate DOM/database/browser capabilities, not script ordering.
+Use explicit imports/exports with this dependency rule:
+
+```text
+pure models/helpers
+        ↑ imported by
+state/read model + storage/domain helpers
+        ↑ imported by
+AppDataService / persistence
+        ↑ imported by
+UI components
+        ↑ composed by
+bootstrap
+```
+
+Equivalently:
+
+```text
+UI may depend on service/state selectors
+service may depend on state-sync/storage/domain
+storage/domain must NOT depend on UI
+bootstrap composes everything
+```
+
+Avoid circular imports by keeping domain helpers pure and keeping UI references out of data/service modules.
+
+## 14.4 Suggested conversion order
+
+Within the isolated module milestone:
+
+```text
+1. pure helpers/models
+2. db schema/db/repositories/mappers
+3. state/read helpers
+4. persistence/data services
+5. UI components
+6. bootstrap composition
+7. remove temporary global bridges
+```
+
+A temporary compatibility export may be used only during the cutover if strictly necessary, but the final state should not depend on global method patching.
+
+## 14.5 No framework or bundler required
+
+Use native browser ES modules only.
+
+Do not add React/Vite/Webpack/etc. merely for this cleanup.
+
+## 14.6 Module cutover acceptance
+
+After conversion:
+
+```text
+one module entry
+no BOOTSTRAP_SCRIPTS
+no dynamic script injection
+no load-order Object.assign integrations
+normal startup succeeds
+all persistence/Repeat behavior survives refresh
+```
+
+Then run the full regression matrix again.
 
 ---
 
-# 13. Phase 9 — Accurate Startup Stages and Error Reporting
+# 15. Phase 10 — Final Dead-Code / Runtime-Ownership Audit
 
-Refactor `app.js` to export:
+After all earlier phases:
+
+Search/remove obsolete compatibility code.
+
+## 15.1 Runtime replacement audit
+
+Search for patterns equivalent to:
 
 ```text
-startApp()
+SomeComponent.someMethod = function ...
+const baseX = ...; X = enhanced...
+Object.assign(window.AppState, mutation mixin)
+Object.assign(window.AppDataService, late patch)  // if no longer part of final module design
+install...Enhancements() that replaces existing business methods
 ```
 
-Use clearly separated stages.
+Not every assignment is wrong, but no final domain command should rely on late monkey-patching.
 
-Recommended sequence:
+## 15.2 Required final searches
+
+### Problem #6
 
 ```text
-1. theme initialization
-2. database open / first-run initialization
-3. data hydration + relationship repair
-4. Repeat state repair
-5. UI component initialization
+ui-persistence-bindings.js       gone
+bindPersistentUiMutations        zero references
 ```
 
-Module loading is handled/caught by `bootstrap.js` before these stages.
-
----
-
-## 13.1 Error categories
-
-### Module graph failure
-
-User message:
+### Problem #7
 
 ```text
-Application code could not be loaded. Refresh and try again.
+repeat-storage.js                gone
+data-service-repeat.js           gone
+__repeatState                    zero references
 ```
 
-Console:
+### Problem #8
+
+UI/components should have zero domain-write calls to:
 
 ```text
-[startup:module-load]
+AppState.addTask
+AppState.updateTask
+AppState.deleteTask
+AppState.toggleTaskStatus
+AppState.addProject
+AppState.updateProject
+AppState.deleteProject
+AppState.addTag
+AppState.updateTag
+AppState.deleteTag
 ```
 
-### Database open / initialization failure
+### Problem #10
 
-User message:
-
-```text
-The local database could not be opened. Existing data was not cleared.
-```
-
-Console:
+Data/storage/service modules should have zero references to:
 
 ```text
-[startup:database]
-```
-
-### Hydration/relationship repair failure
-
-User message:
-
-```text
-Saved data could not be loaded safely. Existing data was not cleared.
-```
-
-Console:
-
-```text
-[startup:hydration]
-```
-
-### Repeat repair failure
-
-User message should specifically identify startup data repair rather than module loading.
-
-Console:
-
-```text
-[startup:repeat-repair]
-```
-
-### UI initialization failure
-
-User message:
-
-```text
-The application interface could not be initialized.
-```
-
-Console:
-
-```text
-[startup:ui]
-```
-
-Do not expose raw exception internals in the visible banner; retain them in `console.error`.
-
----
-
-## 13.2 One generic UI error renderer, distinct from persistence
-
-Move the current error-banner DOM concern out of `AppPersistence` into the generic UI error helper introduced earlier.
-
-Then:
-
-```text
-AppPersistence → persistence only
-bootstrap       → classifies startup stage
-UI components   → report failed user commands
-UiError         → renders message
-```
-
-This prevents a persistence object from becoming the app-wide error UI service.
-
----
-
-# 14. Phase 10 — Final Dead-Code / Compatibility Cleanup
-
-After native module conversion:
-
-Delete confirmed obsolete files:
-
-```text
-js/storage/ui-persistence-bindings.js
-js/storage/repeat-storage.js
-js/storage/data-service-repeat.js
-js/components/sidebar-projects.js
-js/components/sidebar-tags.js
-```
-
-Delete `js/storage/data-service-drag.js` if the required static reference audit confirms the current hierarchy drag service fully supersedes it.
-
-Refactor rather than delete:
-
-```text
-js/task-relations.js
-js/task-order.js
-```
-
-into explicit imported read/order helpers with no AppState monkey-patching.
-
-Remove temporary compatibility globals if any were used during the ESM cutover.
-
-Final production architecture should not require internal `window.*` service/component globals.
-
----
-
-# 15. Expected Final File Responsibilities
-
-## State/domain
-
-```text
-js/state.js
-    AppState read model
-    AppStateStore synchronization boundary
-
-js/seed-data.js
-    first-run seed only
-
-js/task-model.js
-    pure Task normalization/model helpers
-
-js/task-relations.js
-    Task parent/child read/validation helpers
-
-js/task-order.js
-    pure Task order calculations/selectors
-
-js/taxonomy-order.js
-    Project/Tag hierarchy/order reads
-
-js/task-filter.js
-    filter matching/counts/family-aware display selection
-
-js/reminder-model.js
-    built-in/custom reminder domain conversion
-
-js/repeat/repeat-engine.js
-    pure recurrence calculations
-```
-
-## Storage/service
-
-```text
-js/storage/db-schema.js
-js/storage/db.js
-js/storage/repositories.js
-js/storage/mappers.js
-js/storage/persistence.js
-js/storage/data-service.js
-js/storage/data-service-completion.js
-js/storage/data-service-taxonomy.js
-js/storage/data-service-taxonomy-drag.js
-js/storage/data-service-hierarchy.js
-```
-
-`data-service.js` may be an explicit facade assembled from imported method modules to keep files small.
-
-## UI
-
-```text
-js/components/sidebar.js
-js/components/sidebar-taxonomy.js
-js/components/workspace-controls.js
-js/components/tasks.js + existing Task submodules
-js/components/subtask-editor.js
-js/components/schedule.js + existing Schedule submodules
-js/components/settings.js
-js/ui-error.js
-```
-
-## Entry
-
-```text
-js/bootstrap.js
-js/app.js
-```
-
----
-
-# 16. Circular Dependency Rules
-
-Native modules expose bad dependency direction quickly. Avoid cycles deliberately.
-
-Required direction:
-
-```text
-pure domain helper
-    ↓ may be imported by
-state/selectors
-    ↓ may be imported by
-services and UI
-
-storage primitives
-    ↓
-AppDataService
-    ↓
-UI commands
-```
-
-Do not allow:
-
-```text
-AppDataService imports a UI component
-AppPersistence imports a UI component
-state imports a UI component
-mappers import a UI component
-```
-
-UI components may import services/state/helpers.
-
-`app.js` may import all top-level components/services to initialize them.
-
----
-
-# 17. Data Transaction Invariant
-
-For every persistent command:
-
-```text
-1. validate against current read model
-2. create copies/next values
-3. execute complete IndexedDB transaction
-4. only if transaction succeeds, update AppStateStore
-5. render from new AppState
-```
-
-Never:
-
-```text
-mutate AppState first
-then hope IndexedDB succeeds
-```
-
-This invariant already exists in most AppDataService methods and must become universal after removing the UI patch layer.
-
----
-
-# 18. Repeat Regression Matrix
-
-Because Problem #7 changes architecture around one of the most complex features, manually verify all of these after implementation.
-
-## A. No Repeat
-
-Complete normal Task:
-
-```text
-Task → completed
-```
-
-No new occurrence.
-
-## B. Parent + child, no Repeat
-
-Complete parent:
-
-```text
-Parent + all children → completed
-```
-
-## C. Repeating root
-
-Complete root:
-
-```text
-old root/family → completed historical occurrence
-new root/family → created immediately
-Repeat moves to new root
-```
-
-## D. Repeating child completed directly
-
-```text
-old child → completed and Repeat removed
-new child occurrence → active under same parent
-familySlotId preserved
-```
-
-## E. Repeating parent with repeating child templates
-
-Verify familySlot/template selection remains exactly as current ID 9 behavior.
-
-## F. Repeat end by date
-
-No next occurrence beyond inclusive end date.
-
-## G. Repeat end by count
-
-Total occurrence count respected.
-
-## H. Monthly/yearly anchor
-
-End-of-month/leap/calendar anchor behavior remains unchanged.
-
-## I. Historical undo
-
-Uncompleting a historical completed occurrence does not generate another recurrence.
-
----
-
-# 19. Persistence/UI Regression Matrix
-
-## Task
-
-```text
-create
-edit
-complete/uncomplete
-delete
-create subtask
-edit subtask
-link to parent
-unlink
-parent Project change propagates to children
-```
-
-Refresh after every major mutation and confirm persisted state.
-
-## Drag
-
-```text
-root reorder
-child reorder
-root → child
-child → root
-cross-group metadata move
-Project/Tag hierarchy drag
-```
-
-Sort should switch to Custom where currently expected.
-
-## Workspace settings
-
-```text
-Sort key persists
-Sort direction persists
-Group By persists
-Project view type persists
-Tag view type persists
-```
-
-## Reminders
-
-```text
-create custom reminder
-select it on Task
-refresh
-edit Task → custom reminder still selected
-delete custom reminder → removed from Task reminder relations
-```
-
----
-
-# 20. Taxonomy UI Regression Matrix
-
-Verify both Project and Tag through the same shared implementation.
-
-```text
-create root
-create child
-create grandchild
-edit name
-edit icon
-edit view type
-change parent
-delete root with children
-open More menu
-select as filter
-recursive drag reorder
-recursive drag reparent
-Task Project/Tag menus refresh after taxonomy mutation
-```
-
-Project-specific rule:
-
-```text
-deleting Project clears affected Task project relation
-```
-
-Tag-specific rule:
-
-```text
-deleting Tag removes task_tag relations
-```
-
-The shared UI must not accidentally force identical persistence semantics where the domains differ.
-
----
-
-# 21. Permanent Markup Acceptance
-
-After Phase 7, inspect first-load DOM/source.
-
-Required:
-
-```text
-workspace menu already has final structure before WorkspaceControls.init
-Sort & Group panel already exists
-Completed header already is a button
-Link to Parent / Unlink already exist in Task action menu
-Repeat Ends row/modal already exist
-Task Project menu contains no hard-coded Personal/Work rows
-```
-
-JavaScript may set:
-
-```text
-hidden
-selected
-aria-*
-text/count values
-position
-```
-
-but must not replace these permanent controls with newly created equivalents.
-
----
-
-# 22. Module/Bootstrap Static Acceptance
-
-Final `index.html` should have one application JavaScript entry:
-
-```text
-<script type="module" src="js/bootstrap.js"></script>
-```
-
-Repository should no longer contain:
-
-```text
-BOOTSTRAP_SCRIPTS
-loadScript(src)
-data-dynamic-src
-late script-integration Object.assign in app.js
-bindPersistentUiMutations
-```
-
-Internal application modules should use imports/exports rather than script-order globals.
-
-A missing module path must be classified as module-load failure, not storage failure.
-
----
-
-# 23. Static Architecture Acceptance
-
-Search/review after implementation.
-
-Required:
-
-### No UI direct domain mutation
-
-No UI component should call:
-
-```text
-AppState.addTask/updateTask/deleteTask/toggleTaskStatus
-AppState.addProject/updateProject/deleteProject
-AppState.addTag/updateTag/deleteTag
-```
-
-Those domain mutation APIs should not exist on the public read model.
-
-### No data → UI dependency
-
-Storage/data modules must not reference:
-
-```text
-TasksComponent
-SubtaskEditorComponent
-SidebarComponent
-WorkspaceControls
 ScheduleComponent
-SettingsComponent
 ```
 
-### No method decoration
-
-No module should capture a base service/mapper function solely to replace it later.
-
-### One Task completion implementation
-
-There should be one explicit recurrence-aware command path.
-
-### One Project/Tag UI implementation
-
-No mirror Project/Tag modal/tree source files.
-
----
-
-# 24. Error/Failure Acceptance
-
-Manually or through safe development fault simulation where practical:
+### Problem #11
 
 ```text
-invalid module path → “application code could not be loaded”
-IndexedDB open failure → database-specific message
-hydration/repair failure → saved-data-specific message
-UI init exception → interface initialization message
-failed Task save → Task form remains open
-failed Subtask save → Subtask form remains open
-failed Project/Tag save → taxonomy form remains open
-failed settings save → previous setting remains active
+BOOTSTRAP_SCRIPTS                gone
+runtime script injection         gone
+one module entry                 present
 ```
 
-Never clear or reset the database automatically because startup failed.
+### Problem #13/#14
 
----
-
-# 25. Commit Strategy
-
-Do not implement all of ID 18 in one giant commit.
-
-Recommended commit sequence:
+Audit known duplicate/replaced structures:
 
 ```text
-1. refactor: separate task model and state write boundary
-2. refactor: make task relation and order helpers non-mutating
-3. refactor: make repeat mappers explicit
-4. refactor: make repeat-aware task build/write explicit
-5. refactor: move recurrence completion into explicit service
-6. refactor: hydrate reminder definitions into app state
-7. refactor: remove schedule dependency from data service
-8. refactor: move task persistence handlers into task components
-9. refactor: move taxonomy/workspace/drag/reminder persistence into owners
-10. refactor: remove ui persistence binding layer
-11. refactor: consolidate Project and Tag taxonomy UI
-12. refactor: make permanent controls static in index
-13. refactor: convert application modules to native ESM
-14. refactor: split bootstrap stages and startup errors
-15. chore: remove obsolete patch/dead modules and final static audit
+workspace menu
+Task Project picker placeholder rows
+Completed header
+Task hierarchy actions
+Repeat Ends stylesheet/markup ownership
 ```
 
-A small adjustment in commit count is fine, but preserve the dependency order.
+Each must have one owner.
 
-Do not combine unrelated visual redesigns into these commits.
+## 15.3 Old drag service
 
----
-
-# 26. Expected File Change Set
-
-Likely new files:
-
-```text
-js/bootstrap.js
-js/seed-data.js
-js/task-model.js
-js/reminder-model.js
-js/state-store.js                 (optional if not exported beside AppState)
-js/storage/data-service-completion.js
-js/components/sidebar-taxonomy.js
-js/ui-error.js
-```
-
-Likely major modifications:
-
-```text
-index.html
-js/app.js
-js/state.js
-js/task-relations.js
-js/task-order.js
-js/task-filter.js
-js/taxonomy-order.js
-js/repeat/repeat-engine.js         (module syntax; recurrence logic preserved)
-js/storage/db-schema.js            (module syntax only; no schema change expected)
-js/storage/db.js
-js/storage/repositories.js
-js/storage/mappers.js
-js/storage/persistence.js
-js/storage/data-service.js
-js/storage/data-service-taxonomy.js
-js/storage/data-service-taxonomy-drag.js
-js/storage/data-service-hierarchy.js
-js/components/sidebar.js
-js/components/workspace-controls.js
-js/components/task-renderer.js
-js/components/task-actions.js
-js/components/task-drag-commit.js
-js/components/tasks.js
-js/components/subtask-editor.js
-js/components/schedule.js
-js/components/schedule-events.js
-js/components/schedule-time-reminders.js
-js/components/schedule-repeat.js
-js/components/schedule-repeat-end.js
-js/components/schedule-repeat-validation.js
-plus component helper files converted to ES imports/exports
-```
-
-Expected deletions after migration:
-
-```text
-js/storage/ui-persistence-bindings.js
-js/storage/repeat-storage.js
-js/storage/data-service-repeat.js
-js/components/sidebar-projects.js
-js/components/sidebar-tags.js
-```
-
-Conditional deletion after reference audit:
+Audit:
 
 ```text
 js/storage/data-service-drag.js
 ```
 
-No CSS redesign is expected. `schedule-repeat-end.css` should become an explicit static link when Repeat Ends markup moves into HTML.
+against the actual hierarchy drag path.
+
+If it has no final caller, delete it. Do not keep two competing drag persistence implementations.
 
 ---
 
-# 27. Out of Scope
+# 16. Recommended Commit / Rollback Milestones
 
-Do not use this architecture plan to silently implement unrelated tracker items:
+Do not implement ID 18 as one commit.
+
+Recommended checkpoints:
 
 ```text
-Problem #2 modal focus lifecycle / ID 13
-Problem #4 Subtask Tag ordering / ID 17
-Problem #5 actual reminder notification delivery
-Problem #15 sidebar focus
-Problem #16 semantic Project/Tag row accessibility
-Problem #17 pinch zoom
-Problem #18 Project picker hierarchy indentation
-Problem #20 render-time Repeat array mutation
-Problem #21 rerender optimization
-Problem #22 date-label deduplication
-Problem #23 strict Repeat date parsing
-Problem #24 Export/Import
-Problem #25 tests
-Problem #26 placeholder modules
+M0  prerequisites ID13/ID17 resolved or explicitly absorbed
+M1  bootstrap error categories (#12)
+M2  runtime ownership/parity inventory
+M3  Task checkbox persistence ownership + remove override
+M4  Task/Subtask submit ownership + remove overrides
+M5  Task action ownership + remove overrides
+M6  Workspace persistence ownership + remove overrides
+M7  Task drag ownership + remove override
+M8  Project/Tag persistence ownership + remove overrides
+M9  reminder service/state ownership + remove reminder overrides
+M10 delete ui-persistence-bindings.js and bootstrap reference (#6)
+M11 explicit Repeat mapper/build/write/repair
+M12 explicit Repeat completion + delete Repeat patch files (#7)
+M13 AppState mutation-surface cleanup (#8)
+M14 Project/Tag shared-core consolidation (#9)
+M15 one-source markup cleanup (#13/#14)
+M16 isolated native ES-module cutover (#11)
+M17 final dead-code/reference audit
 ```
 
-Some source files overlap with these issues. Preserve their current behavior unless a change is strictly necessary for Problems #6–#14.
+Neighboring milestones may be combined only when the resulting diff remains small enough to reason about and rollback safely.
 
-If ID 13 or ID 17 is implemented before ID 18, preserve those newer behaviors during the refactor.
+Git history is the rollback mechanism. Do not perform destructive database migrations as part of this plan.
 
 ---
 
-# 28. No Browser Automation
+# 17. Manual Regression Matrix
 
-Do not run:
+Run relevant subsets after each milestone and the full matrix before declaring ID 18 complete.
+
+## 17.1 Tasks
+
+- Create root Task in Inbox.
+- Create root Task while inside a Project filter.
+- Create root Task while inside a Tag filter.
+- Edit Task title/description.
+- Edit priority None/Low/Medium/High.
+- Save date.
+- Save time.
+- Save built-in reminder.
+- Save custom reminder.
+- Save Repeat.
+- Delete Task.
+- Complete/uncomplete Task.
+- Refresh after each important mutation.
+
+## 17.2 Subtasks / hierarchy
+
+- Add Subtask.
+- Edit Subtask.
+- Subtask Project remains inherited from parent.
+- Subtask Tag picker follows taxonomy order (ID 17 invariant).
+- Link root Task to parent.
+- Unlink Subtask.
+- Delete Subtask.
+- Delete parent family.
+- Drag root reorder.
+- Drag Subtask reorder.
+- Drag root → Subtask.
+- Drag Subtask → root.
+- Reparent Subtask.
+- Move between Group By lanes where supported.
+- Refresh and confirm hierarchy/order persists.
+
+## 17.3 Family-aware filtering — ID 15 invariant
 
 ```text
-Chrome
-Edge
-Puppeteer
-Playwright
-Selenium
-headless browser automation
+Parent matches filter
+→ show parent family
+
+Parent does not match, child matches
+→ show matching child as standalone presentation row
+→ stored parentTaskId remains unchanged
 ```
 
-for this project unless the user explicitly changes that rule.
+Test in List and Kanban for Today and Tag filters.
 
-Use:
+## 17.4 Repeat — full parity matrix
+
+### Plain Task
+
+- complete;
+- uncomplete;
+- no recurrence generated.
+
+### Repeating root
+
+- Daily;
+- Weekly;
+- Monthly;
+- Yearly;
+- Custom day/week/month/year.
+
+Expected:
 
 ```text
-static source review
-ES-module/syntax checks where available
-pure non-browser logic checks where appropriate
-manual browser/phone verification by the user
+old occurrence completes
+new occurrence created immediately
+Repeat moves to new occurrence
+series/occurrence state advances correctly
 ```
 
-Do not introduce an automated browser test dependency as part of this architecture cleanup.
+### Repeating Subtask
+
+- direct child completion creates next child occurrence;
+- remains under same parent;
+- familySlotId remains stable.
+
+### Parent/child combinations
+
+- non-repeating parent + non-repeating child;
+- non-repeating parent + repeating child;
+- repeating parent + non-repeating child;
+- repeating parent + repeating child;
+- multiple child slots;
+- completed historical child template vs active Repeat owner.
+
+### Repeat Ends
+
+- Never;
+- On Date inclusive;
+- After 1;
+- After N;
+- no extra occurrence after end.
+
+### Historical undo
+
+Uncomplete an old completed occurrence:
+
+```text
+must not create another future occurrence
+```
+
+### Anchor/calendar behavior
+
+- Jan 31 monthly → valid February day → returns to 31 in March;
+- leap-day/year behavior;
+- custom month day fallback;
+- custom year date behavior.
+
+## 17.5 Projects / Tags
+
+For both domains:
+
+- create;
+- edit;
+- delete;
+- add child;
+- parent picker;
+- recursive hierarchy;
+- drag reorder;
+- indent;
+- outdent;
+- reparent;
+- cycle prevention;
+- refresh persistence;
+- saved viewType;
+- counts;
+- current filter repair after delete.
+
+Also verify:
+
+- main Task Project/Tag pickers follow taxonomy order;
+- Subtask Tag picker follows taxonomy order;
+- ID 16 safe text rendering remains intact.
+
+## 17.6 Workspace
+
+- List.
+- Kanban.
+- Sort Custom/Due Date/Priority/Name/Created Date.
+- Ascending/Descending where applicable.
+- Group None/Priority/Date/Project/Tag.
+- custom hierarchy drag sets Sort back to Custom.
+- Project/Tag saved viewType survives refresh.
+- Timeline remains unavailable.
+
+## 17.7 Reminders
+
+- built-in reminder selection;
+- multiple reminders;
+- create custom reminder;
+- custom reminder appears after refresh;
+- reuse custom reminder on another Task;
+- delete custom reminder;
+- relation removed from affected Tasks;
+- Task with no remaining reminder falls back to None;
+- no data-service read of Schedule UI state.
+
+## 17.8 Startup
+
+- existing IndexedDB hydrates without reseeding;
+- initialized empty database remains empty;
+- accurate module/integration/storage/hydration/UI-init error classification;
+- no startup error clears database;
+- final ES-module entry starts correctly.
 
 ---
 
-# 29. Tracker Update Rule
+# 18. Static Verification Gates by Problem
 
-Problems #6 through #14 must remain `[ ]` while this is only a plan.
+## #6 — `ui-persistence-bindings.js`
 
-During implementation, do **not** mark all nine complete at once merely because the final module cutover occurred.
-
-Mark each item `[x]` only when its specific definition is satisfied and important behavior has been reviewed/manually verified.
-
-Suggested mapping:
+Definition of done:
 
 ```text
-#6  complete after ui-persistence-bindings.js is deleted and owner commands verified
-#7  complete after repeat patch files are deleted and recurrence parity verified
-#8  complete after AppState public domain mutation is removed
-#9  complete after one shared taxonomy UI owns Project/Tag tree/modal flow
-#10 complete after data/persistence contain no ScheduleComponent dependency
-#11 complete after final single ES-module graph replaces static+dynamic script loading
-#12 complete after startup errors are stage-specific
-#13 complete after confirmed dead/duplicate permanent HTML is removed
-#14 complete after confirmed permanent controls exist correctly in static markup
+runtime patch file deleted
+bootstrap reference deleted
+all former commands implemented in real owners
+no duplicate/shadowed handlers
 ```
 
-Record this plan path against those items when useful:
+## #7 — Repeat monkey-patching
+
+Definition of done:
 
 ```text
-implementation plan/Implementation Plan ID 18.md
+Repeat-aware mappers explicit
+Repeat-aware task build/write explicit
+Repeat repair explicit
+one recurrence-aware completion implementation
+repeat-storage.js deleted
+data-service-repeat.js deleted
+__repeatState deleted
+```
+
+## #8 — AppState responsibility reduction
+
+Definition of done:
+
+```text
+UI domain writes use AppDataService
+AppState old CRUD mutation APIs removed only after no callers remain
+task-relations no longer captures/replaces CRUD
+durable hierarchy/order writes remain in services
+normalization occurs at boundaries, not as read-side array mutation
+```
+
+## #9 — Project/Tag UI duplication
+
+Definition of done:
+
+```text
+common behavior implemented once in shared core
+Project/Tag-specific configuration stays explicit
+wrappers may remain if they improve clarity
+all existing hierarchy/drag/modal behavior preserved
+```
+
+## #10 — UI dependency from data layer
+
+Definition of done:
+
+```text
+reminder definitions hydrated into state
+Schedule reads reminder definitions from state
+data service never reads ScheduleComponent
+persistence never writes ScheduleComponent
+reminder commands live in focused reminder service responsibility
+```
+
+## #11 — module/bootstrap order
+
+Definition of done:
+
+```text
+one native ES-module application entry
+explicit import/export graph
+no BOOTSTRAP_SCRIPTS
+no runtime script injection
+no late behavior installation needed for load order
+```
+
+## #12 — bootstrap errors
+
+Definition of done:
+
+```text
+module/integration/database/repair/hydration/UI-init failures are distinguishable
+original exception retained in console
+storage error message is only used for real storage failures
+```
+
+## #13 — dead/duplicate HTML
+
+Definition of done:
+
+```text
+no known static structure is immediately discarded/rebuilt by another owner
+placeholder hard-coded taxonomy/task rows removed where state always renders them
+workspace menu has one source
+```
+
+## #14 — runtime-upgraded permanent markup
+
+Definition of done:
+
+```text
+stable interactive controls have one authoritative owner
+semantics/accessibility are correct when interactive
+no placeholder structure exists only to be replaced after startup
+component-owned dynamic DOM remains allowed when it is the sole owner
 ```
 
 ---
 
-# 30. Final Definition of Done
+# 19. Tracker Update Rule
 
-Implementation Plan ID 18 is complete only when all of the following are true:
+Problems #6–#14 must be updated **individually** in:
 
-- `ui-persistence-bindings.js` no longer exists;
-- UI commands call AppDataService directly from their owning components;
-- no checkbox clone/replacement persistence decoration exists;
-- Repeat-aware mappers are explicit in the mapper source;
-- Repeat task construction and aggregate writing are explicit;
-- recurrence-aware completion is the only task-completion command implementation;
-- `repeat-storage.js` and `data-service-repeat.js` no longer exist;
-- AppState is no longer a public domain CRUD/mutation service;
-- seed and Task normalization concerns are separated from state;
-- task relation/order logic no longer monkey-patches AppState mutations;
-- reminder definitions hydrate into state, not ScheduleComponent;
-- AppDataService does not read ScheduleComponent;
-- custom reminder create/delete updates IndexedDB then state then UI;
-- Project and Tag sidebar/modal behavior shares one taxonomy UI implementation;
-- Project/Tag drag DOM contracts remain intact;
-- workspace menu has one structural source of truth;
-- hard-coded Task Project seed menu rows are removed;
-- Completed header is the correct button in static HTML;
-- permanent Link/Unlink task actions are static markup;
-- Repeat Ends permanent shell is static markup;
-- native ES imports/exports replace script-order globals for internal modules;
-- `index.html` uses one module entry;
-- `BOOTSTRAP_SCRIPTS`/script injection/late mixin installation are gone;
-- module-load, database, hydration/repair, and UI-init failures produce accurate distinct messages;
-- IndexedDB schema/data remain compatible;
-- current Task/Subtask/Project/Tag/drag/Repeat/reminder/workspace behavior passes manual regression checks;
-- no browser automation was used;
-- Problems #6–#14 are marked complete individually only after verification.
+```text
+problem is need to be fixed.md
+```
+
+Do not mark all nine complete because ID 18 implementation exists.
+
+For each problem:
+
+```text
+code migrated
++
+static ownership/reference audit passes
++
+important behavior manually verified
+→ then mark [x]
+```
+
+If a problem is implemented but awaiting manual verification, leave `[ ]` and optionally record “implemented, awaiting verification” rather than claiming completion.
+
+---
+
+# 20. Out of Scope / Do Not Accidentally Mix In
+
+Unless required by a concrete regression, do not expand this plan into unrelated tracker work such as:
+
+```text
+#5 real notification delivery
+#15 sidebar focus lifecycle (except overlap with completed ID13 principles if relevant)
+#16 keyboard Project/Tag row semantics
+#17 mobile pinch zoom
+#18 Project picker visual indentation
+#20 render-time Repeat mutation
+#21 rerender optimization
+#22 date label deduplication
+#23 strict Repeat date parsing
+#24 JSON export/import
+#25 general test suite expansion
+#26 placeholder app navigation cleanup
+#27 CSS import cleanup
+```
+
+If implementation naturally touches one of these, preserve behavior and record the overlap, but do not silently mark another tracker item solved without its own acceptance check.
+
+---
+
+# 21. Final Definition of Done
+
+ID 18 is complete only when:
+
+1. Pending overlapping plans ID 13 and ID 17 are resolved or explicitly absorbed.
+2. Bootstrap failures are accurately categorized before risky migrations.
+3. Every former `ui-persistence-bindings.js` command lives in its real owner and the corresponding old override was removed before verification.
+4. `ui-persistence-bindings.js` and its bootstrap/install references are gone.
+5. Repeat mappers/build/write/repair/completion are explicit and the old Repeat patch files are gone.
+6. Recurrence parity is manually verified, including family-slot and Repeat Ends behavior.
+7. Reminder definitions belong to state/service data, not Schedule UI.
+8. AppState no longer acts as a second public domain-write service; old write APIs are removed only after caller audits pass.
+9. Project/Tag duplicated UI behavior uses a shared core with understandable domain-specific configuration.
+10. Known duplicate/runtime-replaced UI sources have one authoritative owner and correct semantics.
+11. The isolated native ES-module cutover succeeds with one application entry and no dynamic ordered script loader.
+12. No IndexedDB schema/version reset or destructive data migration occurred.
+13. Full manual regression succeeds and important mutations survive refresh.
+14. Problems #6–#14 are marked complete individually only after their own verification gates pass.
+
+The final architecture should be understandable by reading the real owner of each behavior:
+
+```text
+UI command
+    ↓
+AppDataService
+    ↓
+IndexedDB transaction
+    ↓ success
+controlled memory sync
+    ↓
+AppState/read selectors
+    ↓
+render
+```
+
+There should be no requirement to know that “another file loaded later will replace this method.”
