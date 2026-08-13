@@ -22,19 +22,22 @@ window.ScheduleComponent = {
   },
   open(initialDueDateStr = null, initialTimeStr = null, initialReminders = null, initialRepeat = null, onApply = null) {
     this.draftDate = initialDueDateStr || null; this.onApplyCallback = onApply; this.draftTime = initialTimeStr ? this.parseTimeString(initialTimeStr) : null; this.draftReminders = Array.isArray(initialReminders) && initialReminders.length ? [...initialReminders] : ['on_time'];
-    this.draftRepeat = initialRepeat && typeof initialRepeat === 'object' ? JSON.parse(JSON.stringify(initialRepeat)) : { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
+    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule(initialRepeat && typeof initialRepeat === 'object' ? initialRepeat : { mode: 'none' });
     if (this.draftDate) { const parts = this.draftDate.split('-').map(Number); this.currentViewDate = new Date(parts[0], parts[1] - 1, parts[2]); } else this.currentViewDate = new Date();
-    this.switchTab('date'); this.renderCalendar(); this.updateReminderUI();
+    this.clearRepeatValidationError?.(); this.switchTab('date'); this.renderCalendar(); this.updateReminderUI(); this.renderRepeatPresetList(); this.renderRepeatEndRow?.(); this.updateRepeatSummary();
     window.ModalFocusManager.open(this.modalEl, { initialFocus: () => this.gridEl?.querySelector('.calendar-day.selected') || this.gridEl?.querySelector('.calendar-day.today') || this.btnQuickToday, fallbackFocus: '#btn-open-add-task' });
   },
   close(discard = true) {
     if (!this.modalEl?.classList.contains('active')) return; this.closeReminderMenu(); window.ModalFocusManager.close(this.modalEl, { fallbackFocus: '#btn-open-add-task' });
-    if (discard) { this.draftDate = null; this.draftTime = null; this.draftReminders = ['on_time']; this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } }; }
+    if (discard) { this.draftDate = null; this.draftTime = null; this.draftReminders = ['on_time']; this.draftRepeat = window.RepeatEngine.normalizeRepeatRule({ mode: 'none' }); }
   },
   apply() {
+    const validation = this.validateRepeatDraft?.() || { valid: true, repeat: this.draftRepeat };
+    if (!validation.valid) { this.switchTab('repeat'); return this.showRepeatValidationError?.(validation.message); }
+    this.clearRepeatValidationError?.(); this.draftRepeat = validation.repeat;
     if (typeof this.onApplyCallback === 'function') {
       const formattedTime = this.draftTime ? `${this.draftTime.hour}:${this.draftTime.minute} ${this.draftTime.period}` : null; let finalDate = this.draftDate; if (formattedTime && !finalDate) finalDate = this.formatDateStr(new Date());
-      this.onApplyCallback({ dueDate: finalDate, dueTime: formattedTime, reminders: [...this.draftReminders], repeat: JSON.parse(JSON.stringify(this.draftRepeat)) });
+      this.onApplyCallback({ dueDate: finalDate, dueTime: formattedTime, reminders: [...this.draftReminders], repeat: window.RepeatEngine.clone(this.draftRepeat) });
     }
     this.close(false);
   },
