@@ -17,6 +17,7 @@ window.ScheduleRepeatEndMethods = {
       baseSelectPreset.call(this, mode);
       this.draftRepeat = engine().normalizeRepeatRule(this.draftRepeat);
       if (mode !== 'none' && !this.draftDate) this.selectDate(engine().today());
+      this.clearRepeatValidationError?.();
       this.renderRepeatEndRow?.();
     };
 
@@ -73,6 +74,13 @@ window.ScheduleRepeatEndMethods = {
     this.repeatOptionsList?.insertAdjacentElement('afterend', row);
     this.repeatEndsRow = row;
     this.repeatEndsValue = row.querySelector('[data-repeat-end-value]');
+
+    const mainError = document.createElement('div');
+    mainError.className = 'repeat-validation-message';
+    mainError.setAttribute('role', 'status');
+    mainError.setAttribute('aria-live', 'polite');
+    this.repeatSummaryText?.parentElement?.insertAdjacentElement('afterend', mainError);
+    this.repeatMainValidationMessage = mainError;
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay repeat-end-overlay';
@@ -136,7 +144,7 @@ window.ScheduleRepeatEndMethods = {
     modal.querySelector('[data-repeat-end-prev]').addEventListener('click', () => this.navigateRepeatEndMonth(-1));
     modal.querySelector('[data-repeat-end-next]').addEventListener('click', () => this.navigateRepeatEndMonth(1));
     modal.addEventListener('click', event => { if (event.target === modal) this.closeRepeatEndModal(); });
-    modal.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); this.closeRepeatEndModal(); } });
+    modal.addEventListener('keydown', event => this.handleRepeatEndKeydown(event));
     this.ensureRepeatValidationMessage();
     this.renderRepeatEndRow();
   },
@@ -187,6 +195,7 @@ window.ScheduleRepeatEndMethods = {
     requestAnimationFrame(() => {
       this.scrollWheelToIndex(this.repeatEndTypeWheel, typeIndex, false, '');
       this.scrollWheelToIndex(this.repeatEndCountWheel, count - 1, false, '');
+      this.repeatEndTypeWheel?.focus();
     });
     this.setRepeatEndType(this.repeatEndDraft.type);
     this.repeatEndModal.classList.add('active');
@@ -199,6 +208,28 @@ window.ScheduleRepeatEndMethods = {
     this.repeatEndDraft = null;
     this.repeatEndSnapshot = null;
     if (this.repeatEndError) this.repeatEndError.textContent = '';
+    this.repeatEndsRow?.focus();
+  },
+
+  handleRepeatEndKeydown(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeRepeatEndModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...this.repeatEndModal.querySelectorAll('button, [tabindex]:not([tabindex="-1"])')]
+      .filter(element => !element.disabled && element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   },
 
   setRepeatEndType(type) {
@@ -278,11 +309,14 @@ window.ScheduleRepeatEndMethods = {
 
   showRepeatValidationError(message) {
     this.ensureRepeatValidationMessage();
-    if (this.repeatValidationMessage) this.repeatValidationMessage.textContent = message || 'Complete the repeat settings.';
+    const text = message || 'Complete the repeat settings.';
+    if (this.repeatValidationMessage) this.repeatValidationMessage.textContent = text;
+    if (this.repeatMainValidationMessage) this.repeatMainValidationMessage.textContent = text;
     return false;
   },
 
   clearRepeatValidationError() {
     if (this.repeatValidationMessage) this.repeatValidationMessage.textContent = '';
+    if (this.repeatMainValidationMessage) this.repeatMainValidationMessage.textContent = '';
   }
 };
