@@ -14,7 +14,7 @@ Object.assign(window.AppDataService, {
       const project = {
         id: this.createId('project'), name, icon: projectData.icon || '●',
         viewType: projectData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        sortOrder: this.nextEntitySortOrder(window.AppState.projects), createdAt: now, updatedAt: now
+        sortOrder: window.TaxonomyOrder.nextSortOrder('project', parentId), createdAt: now, updatedAt: now
       };
       const S = window.TodoDbSchema.STORES;
       await window.TodoDb.withTransaction(S.PROJECTS, 'readwrite', tx =>
@@ -26,49 +26,29 @@ Object.assign(window.AppDataService, {
   },
 
   updateProject(projectId, projectData = {}) {
-    return this.enqueue(async () => {
-      const existing = window.AppState.getProject(projectId);
-      if (!existing) throw new Error('Project not found.');
-      const name = String(projectData.name ?? existing.name).trim();
-      if (!name) throw new Error('Project name is required.');
-      const parentId = projectData.parentId || null;
-      if (parentId) {
-        if (!window.AppState.getProject(parentId)) throw new Error('Parent project not found.');
-        if (parentId === projectId || window.AppState.isProjectDescendant(parentId, projectId)) {
-          throw new Error('Project hierarchy cannot contain a cycle.');
-        }
-      }
-      const updated = {
-        ...existing, name, icon: projectData.icon || existing.icon || '●',
-        viewType: projectData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        updatedAt: window.TodoStorageMappers.nowIso()
-      };
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction(S.PROJECTS, 'readwrite', tx =>
-        window.TodoRepositories.put(tx, S.PROJECTS, updated)
-      );
-      Object.assign(existing, updated);
-      return existing;
-    });
+    return this.enqueue(() => this.updateTaxonomyEntityWithOrder('project', projectId, projectData));
   },
 
   deleteProject(projectId) {
     return this.enqueue(async () => {
       if (!window.AppState.getProject(projectId)) return false;
-      const childIds = new Set(window.AppState.projects.filter(item => item.parentId === projectId).map(item => item.id));
+      const plan = this.prepareTaxonomyDelete('project', projectId);
       const affectedTaskIds = new Set(window.AppState.tasks.filter(item => item.project === projectId).map(item => item.id));
       const S = window.TodoDbSchema.STORES;
-      const now = window.TodoStorageMappers.nowIso();
       await window.TodoDb.withTransaction([S.PROJECTS, S.TASKS], 'readwrite', async tx => {
-        const children = await window.TodoRepositories.getAllByIndex(tx, S.PROJECTS, 'by_parent_id', projectId);
-        for (const child of children) await window.TodoRepositories.put(tx, S.PROJECTS, { ...child, parentId: null, updatedAt: now });
+        for (const id of plan.changed) {
+          const copy = plan.copies.get(id);
+          if (copy) await window.TodoRepositories.put(tx, S.PROJECTS, copy);
+        }
         const tasks = await window.TodoRepositories.getAllByIndex(tx, S.TASKS, 'by_project_id', projectId);
-        for (const task of tasks) await window.TodoRepositories.put(tx, S.TASKS, { ...task, projectId: null, updatedAt: now });
+        for (const task of tasks) {
+          await window.TodoRepositories.put(tx, S.TASKS, { ...task, projectId: null, updatedAt: plan.now });
+        }
         await window.TodoRepositories.remove(tx, S.PROJECTS, projectId);
       });
+      this.applyTaxonomyMemory('project', plan.copies, plan.changed);
       window.AppState.deleteProject(projectId);
-      window.AppState.projects.forEach(item => { if (childIds.has(item.id)) item.updatedAt = now; });
-      window.AppState.tasks.forEach(item => { if (affectedTaskIds.has(item.id)) item.updatedAt = now; });
+      window.AppState.tasks.forEach(item => { if (affectedTaskIds.has(item.id)) item.updatedAt = plan.now; });
       return true;
     });
   },
@@ -83,7 +63,7 @@ Object.assign(window.AppDataService, {
       const tag = {
         id: this.createId('tag'), name, icon: tagData.icon || '●',
         viewType: tagData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        sortOrder: this.nextEntitySortOrder(window.AppState.tags), createdAt: now, updatedAt: now
+        sortOrder: window.TaxonomyOrder.nextSortOrder('tag', parentId), createdAt: now, updatedAt: now
       };
       const S = window.TodoDbSchema.STORES;
       await window.TodoDb.withTransaction(S.TAGS, 'readwrite', tx =>
@@ -95,46 +75,24 @@ Object.assign(window.AppDataService, {
   },
 
   updateTag(tagId, tagData = {}) {
-    return this.enqueue(async () => {
-      const existing = window.AppState.getTag(tagId);
-      if (!existing) throw new Error('Tag not found.');
-      const name = String(tagData.name ?? existing.name).trim();
-      if (!name) throw new Error('Tag name is required.');
-      const parentId = tagData.parentId || null;
-      if (parentId) {
-        if (!window.AppState.getTag(parentId)) throw new Error('Parent tag not found.');
-        if (parentId === tagId || window.AppState.isTagDescendant(parentId, tagId)) {
-          throw new Error('Tag hierarchy cannot contain a cycle.');
-        }
-      }
-      const updated = {
-        ...existing, name, icon: tagData.icon || existing.icon || '●',
-        viewType: tagData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        updatedAt: window.TodoStorageMappers.nowIso()
-      };
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction(S.TAGS, 'readwrite', tx =>
-        window.TodoRepositories.put(tx, S.TAGS, updated)
-      );
-      Object.assign(existing, updated);
-      return existing;
-    });
+    return this.enqueue(() => this.updateTaxonomyEntityWithOrder('tag', tagId, tagData));
   },
 
   deleteTag(tagId) {
     return this.enqueue(async () => {
       if (!window.AppState.getTag(tagId)) return false;
-      const childIds = new Set(window.AppState.tags.filter(item => item.parentId === tagId).map(item => item.id));
+      const plan = this.prepareTaxonomyDelete('tag', tagId);
       const S = window.TodoDbSchema.STORES;
-      const now = window.TodoStorageMappers.nowIso();
       await window.TodoDb.withTransaction([S.TAGS, S.TASK_TAGS], 'readwrite', async tx => {
-        const children = await window.TodoRepositories.getAllByIndex(tx, S.TAGS, 'by_parent_id', tagId);
-        for (const child of children) await window.TodoRepositories.put(tx, S.TAGS, { ...child, parentId: null, updatedAt: now });
+        for (const id of plan.changed) {
+          const copy = plan.copies.get(id);
+          if (copy) await window.TodoRepositories.put(tx, S.TAGS, copy);
+        }
         await window.TodoRepositories.deleteByIndex(tx, S.TASK_TAGS, 'by_tag_id', tagId);
         await window.TodoRepositories.remove(tx, S.TAGS, tagId);
       });
+      this.applyTaxonomyMemory('tag', plan.copies, plan.changed);
       window.AppState.deleteTag(tagId);
-      window.AppState.tags.forEach(item => { if (childIds.has(item.id)) item.updatedAt = now; });
       return true;
     });
   },
