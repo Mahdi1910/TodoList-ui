@@ -10,13 +10,13 @@ window.TaskRendererMethods = {
   renderList(filtered) {
     this.listViewEl.hidden = false;
     this.kanbanViewEl.hidden = true;
+    this.ensureCompletedSectionToggle();
     const roots = window.AppState.getRootTasks(filtered);
     const activeTasks = roots.filter(task => !task.completed);
     const completedTasks = roots.filter(task => task.completed);
     const groupKey = window.WorkspaceControls?.groupKey || 'none';
     if (groupKey === 'none') this.setDropLaneContext(this.activeListEl, 'active', 'none', 'all');
     else this.clearDropLaneContext(this.activeListEl);
-    this.setDropLaneContext(this.completedListEl, 'completed', 'none', 'all');
 
     this.activeListEl.innerHTML = '';
     this.activeEmptyStateEl.style.display = activeTasks.length ? 'none' : 'flex';
@@ -35,6 +35,71 @@ window.TaskRendererMethods = {
     this.completedSectionEl.classList.toggle('has-tasks', orderedCompleted.length > 0);
     orderedCompleted.forEach(task => this.completedListEl.appendChild(this.createTaskFamily(task)));
     this.completedCountEl.textContent = `${orderedCompleted.length} ${orderedCompleted.length === 1 ? 'task' : 'tasks'}`;
+    this.syncCompletedSectionState(orderedCompleted.length > 0);
+  },
+
+  ensureCompletedSectionToggle() {
+    if (this.completedSectionToggle || !this.completedSectionEl) return;
+    const header = this.completedSectionEl.querySelector(':scope > .section-header-title');
+    if (!header) return;
+
+    if (typeof this.completedSectionCollapsed !== 'boolean') {
+      this.completedSectionCollapsed = false;
+    }
+
+    const label = header.querySelector('span:first-child');
+    const count = this.completedCountEl || header.querySelector('#completed-tasks-count');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'section-header-title completed-section-toggle';
+    button.setAttribute('aria-controls', 'completed-task-list');
+    button.setAttribute('aria-expanded', 'true');
+    button.setAttribute('aria-label', 'Collapse completed tasks');
+
+    if (label) button.appendChild(label);
+    else {
+      const fallbackLabel = document.createElement('span');
+      fallbackLabel.textContent = 'Completed';
+      button.appendChild(fallbackLabel);
+    }
+
+    const meta = document.createElement('span');
+    meta.className = 'completed-section-toggle-meta';
+    if (count) meta.appendChild(count);
+    const chevron = document.createElement('span');
+    chevron.className = 'completed-section-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = '▾';
+    meta.appendChild(chevron);
+    button.appendChild(meta);
+    header.replaceWith(button);
+
+    this.completedSectionToggle = button;
+    this.completedSectionChevron = chevron;
+    button.addEventListener('click', () => this.toggleCompletedSection());
+  },
+
+  toggleCompletedSection() {
+    this.completedSectionCollapsed = !this.completedSectionCollapsed;
+    const hasTasks = this.completedSectionEl?.classList.contains('has-tasks') || false;
+    this.syncCompletedSectionState(hasTasks);
+  },
+
+  syncCompletedSectionState(hasTasks) {
+    if (!this.completedListEl) return;
+    const expanded = Boolean(hasTasks && !this.completedSectionCollapsed);
+    this.completedListEl.hidden = !expanded;
+
+    if (expanded) this.setDropLaneContext(this.completedListEl, 'completed', 'none', 'all');
+    else this.clearDropLaneContext(this.completedListEl);
+
+    if (!this.completedSectionToggle) return;
+    this.completedSectionToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    this.completedSectionToggle.setAttribute(
+      'aria-label',
+      expanded ? 'Collapse completed tasks' : 'Expand completed tasks'
+    );
+    if (this.completedSectionChevron) this.completedSectionChevron.textContent = expanded ? '▾' : '▸';
   },
 
   createTaskCard(task, options = {}) {
