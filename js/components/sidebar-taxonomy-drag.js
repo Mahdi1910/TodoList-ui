@@ -176,6 +176,7 @@ window.SidebarTaxonomyDragMethods = {
       previewAfterEntityId: initialPreview.afterEntityId,
       initialPreview: { ...initialPreview },
       forcedChildZone: false,
+      dropDomainActive: true,
       rootAlignmentX: measurement.rootX,
       indentStep: measurement.indentStep
     };
