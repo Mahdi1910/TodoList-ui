@@ -99,7 +99,7 @@ window.TaskActionMethods = {
 
   getEligibleParentTasks(taskId) {
     return window.AppState.getRootTasks()
-      .filter(task => task.id !== taskId)
+      .filter(task => task.id !== taskId && !task.completed)
       .sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.title).localeCompare(String(b.title)));
   },
 
