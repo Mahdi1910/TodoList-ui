@@ -4,6 +4,18 @@ window.TaskHierarchyMethods = {
     this.subtaskFamilyRenderSeq = 0;
   },
 
+  createTaskDisplayUnit(task) {
+    if (!task?.parentTaskId) return this.createTaskFamily(task);
+    return this.createStandaloneFilteredSubtask(task);
+  },
+
+  createStandaloneFilteredSubtask(task) {
+    const card = this.createTaskCard(task, { isSubtask: false });
+    card.classList.add('standalone-filtered-subtask');
+    card.dataset.filteredStandaloneSubtask = 'true';
+    return card;
+  },
+
   createTaskFamily(parentTask) {
     const parent = window.AppState.normalizeTask(parentTask);
     const children = window.WorkspaceControls?.sortTasks(window.AppState.getSubtasks(parent.id))
