@@ -36,7 +36,8 @@ window.SidebarTaxonomyDragMethods = {
   assertTaxonomyDragIntegration() {
     const required = [
       'resolveTaxonomyDrop', 'measureTaxonomyIndent', 'applyTaxonomyPreview',
-      'resolveTaxonomySiblingSlot', 'commitTaxonomyDrag', 'cancelTaxonomyDrag',
+      'resolveTaxonomySiblingSlot', 'buildTaxonomySourceAncestorZones',
+      'shouldSuppressSourceAncestorForcedZone', 'commitTaxonomyDrag', 'cancelTaxonomyDrag',
       'startTaxonomyDragAutoScroll', 'initTaxonomyTouchDrag'
     ];
     const missing = required.filter(name => typeof this[name] !== 'function');
@@ -141,6 +142,11 @@ window.SidebarTaxonomyDragMethods = {
     const rect = pending.node.getBoundingClientRect();
     const measurement = this.measureTaxonomyIndent(pending.container);
     const initialPreview = this.buildInitialTaxonomyPreview(pending);
+    const sourceAncestorZoneDepths = this.buildTaxonomySourceAncestorZones(
+      pending.entityType,
+      pending.entityId,
+      pending.sourceDepth
+    );
     const placeholder = document.createElement('div');
     placeholder.className = 'sidebar-taxonomy-placeholder';
     placeholder.style.height = `${Math.max(36, rect.height)}px`;
@@ -162,6 +168,7 @@ window.SidebarTaxonomyDragMethods = {
       sourceParentId: pending.sourceParentId,
       sourceDepth: pending.sourceDepth,
       sourceHost: pending.sourceHost,
+      sourceAncestorZoneDepths,
       dragUnit: pending.node,
       container: pending.container,
       placeholder,
