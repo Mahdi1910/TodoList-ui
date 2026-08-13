@@ -5,12 +5,16 @@
 
 const BOOTSTRAP_SCRIPTS = [
   'js/components/task-drag-hierarchy.js',
+  'js/repeat/repeat-engine.js',
+  'js/components/schedule-repeat-end.js',
   'js/storage/db-schema.js',
   'js/storage/db.js',
   'js/storage/repositories.js',
   'js/storage/mappers.js',
   'js/storage/persistence.js',
   'js/storage/data-service.js',
+  'js/storage/repeat-storage.js',
+  'js/storage/data-service-repeat.js',
   'js/storage/data-service-taxonomy.js',
   'js/storage/data-service-drag.js',
   'js/storage/data-service-hierarchy.js',
@@ -49,15 +53,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     for (const src of BOOTSTRAP_SCRIPTS) await loadScript(src);
 
-    // task-drag-hierarchy.js loads after tasks.js has already copied TaskDragMethods.
-    // Install the hierarchy mixin on the live component before persistence bindings and init.
+    // These modules are loaded after the static component aggregators, so install them
+    // on the live component objects before persistence bindings and UI initialization.
     if (!window.TasksComponent || !window.TaskDragHierarchyMethods) {
       throw new Error('Hierarchy drag component could not be loaded.');
     }
+    if (!window.RepeatEngine || !window.ScheduleComponent || !window.ScheduleRepeatEndMethods) {
+      throw new Error('Repeat recurrence components could not be loaded.');
+    }
     Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods);
+    Object.assign(window.ScheduleComponent, window.ScheduleRepeatEndMethods);
+    window.ScheduleComponent.installRepeatEnhancements();
 
     await window.AppPersistence.initialize();
     await window.AppPersistence.hydrateState();
+    await window.AppDataService.repairRepeatState();
     window.bindPersistentUiMutations();
   } catch (error) {
     if (window.AppPersistence?.reportError) {
@@ -72,6 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.WorkspaceControls.init();
   window.TasksComponent.init();
   window.ScheduleComponent.init();
+  window.ScheduleComponent.initRepeatEndUi();
   window.SubtaskEditorComponent.init();
   window.SettingsComponent.init();
 
