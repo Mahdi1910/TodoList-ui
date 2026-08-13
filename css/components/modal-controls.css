@@ -141,7 +141,6 @@ input:checked + .toggle-slider:before {
   transform: translateX(20px);
 }
 
-
 .toggle-switch input:focus-visible + .toggle-slider {
   outline: 2px solid var(--accent-color);
   outline-offset: 3px;
@@ -192,6 +191,100 @@ input:checked + .toggle-slider:before {
   background-color: var(--accent-hover);
 }
 
+.settings-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-section-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.settings-data-note,
+.backup-restore-status,
+.restore-summary span {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.settings-data-actions,
+.restore-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-data-actions .btn-secondary {
+  flex: 1 1 150px;
+}
+
+.backup-restore-status {
+  min-height: 18px;
+  margin: 10px 0 0;
+}
+
+.backup-restore-status[data-state="success"] {
+  color: var(--text-secondary);
+}
+
+.backup-restore-status[data-state="error"] {
+  color: #ff6961;
+}
+
+.restore-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.restore-summary[hidden] {
+  display: none;
+}
+
+.restore-warning {
+  color: var(--text-secondary) !important;
+  font-weight: 600;
+}
+
+.btn-danger {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  background: #d93c3c;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.btn-danger:hover,
+.btn-danger:focus-visible {
+  background: #c73333;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -202,4 +295,17 @@ input:checked + .toggle-slider:before {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+@media (max-width: 520px) {
+  .settings-data-actions,
+  .restore-confirm-actions {
+    flex-direction: column;
+  }
+
+  .settings-data-actions .btn-secondary,
+  .restore-confirm-actions button {
+    width: 100%;
+    flex: none;
+  }
 }
