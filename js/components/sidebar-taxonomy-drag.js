@@ -14,7 +14,7 @@ window.SidebarTaxonomyDragMethods = {
     document.addEventListener('pointermove', e => this.onTaxonomyPointerMove(e), { passive: false });
     document.addEventListener('pointerup', e => this.onTaxonomyPointerUp(e));
     document.addEventListener('pointercancel', e => this.onTaxonomyPointerCancel(e));
-    this.sidebarEl.addEventListener('click', e => {
+    document.addEventListener('click', e => {
       if (performance.now() < this.taxonomyDragSuppressClickUntil) {
         e.preventDefault();
         e.stopImmediatePropagation();
