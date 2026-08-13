@@ -141,6 +141,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - The IndexedDB design is good, but the data is still browser-local.
   - Add a simple full-data backup/export and validated transactional restore/import.
   - This is important for a personal application because clearing browser/site data could otherwise lose everything.
+  - Related plan: `implementation plan/Implementation Plan ID 19.md`.
 
 - [ ] **25. Add small pure-JavaScript tests for complex logic.**
   - No browser automation is required.
