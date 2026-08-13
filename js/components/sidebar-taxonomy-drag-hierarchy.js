@@ -41,7 +41,7 @@ window.SidebarTaxonomyDragHierarchyMethods = {
   measureTaxonomyIndent(container) {
     const rootNode = this.getTaxonomyDirectNodes(container)[0] || null;
     const rootRow = this.getTaxonomyNodeRow(rootNode);
-    let rootX = rootRow?.getBoundingClientRect().left ?? container.getBoundingClientRect().left;
+    const rootX = rootRow?.getBoundingClientRect().left ?? container.getBoundingClientRect().left;
     let indentStep = 0;
 
     const childNode = rootNode ? this.getTaxonomyDirectNodes(this.getTaxonomyChildHost(rootNode))[0] : null;
@@ -185,7 +185,11 @@ window.SidebarTaxonomyDragHierarchyMethods = {
     if (!session?.container) return;
     const domain = session.container.closest('.sidebar-section') || session.container;
     const insideDomain = document.elementsFromPoint(x, y).some(element => element === domain || domain.contains(element));
-    if (!insideDomain) return;
+    if (!insideDomain) {
+      session.dropDomainActive = false;
+      return;
+    }
+    session.dropDomainActive = true;
 
     const measurement = this.measureTaxonomyIndent(session.container);
     this.updateTaxonomyDepthIntent(x - session.offsetX, measurement);
