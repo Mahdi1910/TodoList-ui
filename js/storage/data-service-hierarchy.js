@@ -76,6 +76,7 @@ Object.assign(window.AppDataService, {
       const childIds = [...this.hierarchyScopeIds(parent.id, task.id), task.id];
       const moved = copies.get(task.id);
       moved.parentTaskId = parent.id;
+      moved.familySlotId = this.createId('slot');
       moved.project = parent.project || '';
       moved.updatedAt = now;
       changed.add(task.id);
@@ -100,6 +101,7 @@ Object.assign(window.AppDataService, {
       const rootIds = this.insertHierarchyRelative(rootBase, task.id, null, formerParentId);
       const moved = copies.get(task.id);
       moved.parentTaskId = null;
+      moved.familySlotId = null;
       moved.updatedAt = now;
       changed.add(task.id);
       this.applyHierarchyScope(copies, formerParentId, childIds, changed);
@@ -141,7 +143,12 @@ Object.assign(window.AppDataService, {
       const targetIds = this.insertHierarchyRelative(targetBase, task.id, beforeTaskId, afterTaskId);
 
       moved.parentTaskId = targetParentId || null;
-      if (targetLevel === 'subtask') moved.project = parent.project || '';
+      if (targetLevel === 'subtask') {
+        moved.project = parent.project || '';
+        if (!sourceParentId) moved.familySlotId = this.createId('slot');
+      } else {
+        moved.familySlotId = null;
+      }
       moved.updatedAt = now;
       changed.add(task.id);
       if (sourceParentId !== targetParentId) {
