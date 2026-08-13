@@ -247,10 +247,12 @@ window.TasksComponent = {
 Object.assign(
   window.TasksComponent,
   window.TaskMenuMethods,
+  window.TaskTaxonomyMenuOrderMethods,
   window.TaskActionMethods,
   window.TaskGroupMethods,
   window.TaskHierarchyMethods,
   window.TaskKanbanMethods,
+  window.TaskDragHierarchyMethods,
   window.TaskDragMethods,
   window.TaskDragTouchMethods,
   window.TaskDragCommitMethods,
