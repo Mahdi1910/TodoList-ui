@@ -38,6 +38,34 @@ window.SidebarTaxonomyDragHierarchyMethods = {
     return !window.TaxonomyOrder.getDescendantIds(entityType, entityId).includes(parentId);
   },
 
+  buildTaxonomySourceAncestorZones(entityType, entityId, sourceDepth = null) {
+    const zones = new Map();
+    let current = window.TaxonomyOrder.getEntity(entityType, entityId);
+    if (!current) return zones;
+
+    let zoneDepth = Number.isFinite(sourceDepth)
+      ? sourceDepth
+      : window.TaxonomyOrder.getDepth(entityType, entityId);
+    let parentId = current.parentId || null;
+    const seen = new Set([entityId]);
+
+    while (parentId && zoneDepth > 0 && !seen.has(parentId)) {
+      zones.set(parentId, zoneDepth);
+      seen.add(parentId);
+      current = window.TaxonomyOrder.getEntity(entityType, parentId);
+      parentId = current?.parentId || null;
+      zoneDepth -= 1;
+    }
+    return zones;
+  },
+
+  shouldSuppressSourceAncestorForcedZone(parentId, zoneDepth) {
+    const session = this.taxonomyDragSession;
+    if (!session || !parentId) return false;
+    const sourceZoneDepth = session.sourceAncestorZoneDepths?.get(parentId);
+    return sourceZoneDepth === zoneDepth && session.horizontalDepthIntent < zoneDepth;
+  },
+
   measureTaxonomyIndent(container) {
     const rootNode = this.getTaxonomyDirectNodes(container)[0] || null;
     const rootRow = this.getTaxonomyNodeRow(rootNode);
@@ -119,10 +147,12 @@ window.SidebarTaxonomyDragHierarchyMethods = {
       if (!direct.length) return;
       const parentId = host.dataset.treeParentId || null;
       if (!this.isValidTaxonomyParent(session.entityType, session.entityId, parentId)) return;
+      const parentNode = host.closest('.sidebar-tree-node');
+      const zoneDepth = this.getTaxonomyDepth(parentNode) + 1;
+      if (this.shouldSuppressSourceAncestorForcedZone(parentId, zoneDepth)) return;
       const rect = host.getBoundingClientRect();
       if (y < rect.top - 3 || y > rect.bottom + 3) return;
-      const parentNode = host.closest('.sidebar-tree-node');
-      candidates.push({ host, parentId, depth: this.getTaxonomyDepth(parentNode) + 1 });
+      candidates.push({ host, parentId, depth: zoneDepth });
     });
     return candidates.sort((a, b) => b.depth - a.depth)[0] || null;
   },
