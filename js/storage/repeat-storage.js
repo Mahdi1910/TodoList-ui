@@ -100,12 +100,10 @@
     if (preserve) {
       task.repeatState = { ...existing.repeatState, _needsRepair: false };
     } else {
-      const previous = existing?.repeatState || {};
       task.repeatState = engine().createInitialRepeatState(task.repeat, task.dueDate, {
-        seriesId: previous.seriesId || createId('series'),
-        occurrenceNumber: previous.occurrenceNumber || 1
+        seriesId: createId('series'),
+        occurrenceNumber: 1
       });
-      task.repeatState.seriesId ||= createId('series');
     }
     return result;
   };
