@@ -30,6 +30,7 @@ This file is the permanent cleanup/problem tracker for the application.
 - [ ] **3. Fix unsafe HTML building in Task Project/Tag menus.**
   - Some menu rendering uses `innerHTML` with a helper named `escapeText()` that does not actually HTML-escape its value.
   - Prefer DOM creation + `textContent` for user-controlled Project/Tag names and icons.
+  - Related plan: `implementation plan/Implementation Plan ID 16.md`.
 
 - [ ] **4. Fix Subtask Tag menu ordering.**
   - The main Task editor uses the new taxonomy ordering system.
