@@ -118,7 +118,7 @@ window.TaskGroupMethods = {
     this.setDropLaneContext(list, 'active', groupKey, group.key);
     list.hidden = collapsed;
     const ordered = window.WorkspaceControls?.sortTasks(group.tasks) || [...group.tasks];
-    ordered.forEach(task => list.appendChild(this.createTaskFamily(task)));
+    ordered.forEach(task => list.appendChild(this.createTaskDisplayUnit(task)));
 
     header.addEventListener('click', () => {
       const shouldCollapse = header.getAttribute('aria-expanded') === 'true';
