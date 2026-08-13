@@ -1,6 +1,7 @@
 Object.assign(window.AppDataService, {
   taxonomyConfig(entityType) {
-    const type = entityType === 'tag' ? 'tag' : 'project';
+    if (!['project', 'tag'].includes(entityType)) throw new Error('Invalid taxonomy type.');
+    const type = entityType;
     return {
       type,
       items: type === 'project' ? window.AppState.projects : window.AppState.tags,
@@ -106,19 +107,25 @@ Object.assign(window.AppDataService, {
   },
 
   async updateTaxonomyEntityWithOrder(entityType, entityId, data = {}) {
-    const { entity, config } = this.validateTaxonomyParent(entityType, entityId, data.parentId || null);
+    const existingConfig = this.taxonomyConfig(entityType);
+    const existing = window.TaxonomyOrder.getEntity(existingConfig.type, entityId);
+    if (!existing) throw new Error(`${existingConfig.label} not found.`);
+    const targetParentId = data.parentId === undefined ? (existing.parentId || null) : (data.parentId || null);
+    const { entity, config } = this.validateTaxonomyParent(entityType, entityId, targetParentId);
     const name = String(data.name ?? entity.name).trim();
     if (!name) throw new Error(`${config.label} name is required.`);
-    const targetParentId = data.parentId || null;
     const sourceParentId = entity.parentId || null;
     const copies = this.taxonomyCopies(config.type);
     const changed = new Set([entityId]);
     const now = window.TodoStorageMappers.nowIso();
     const moved = copies.get(entityId);
+    const viewType = data.viewType === undefined
+      ? (entity.viewType === 'kanban' ? 'kanban' : 'list')
+      : (data.viewType === 'kanban' ? 'kanban' : 'list');
     Object.assign(moved, {
       name,
-      icon: data.icon || entity.icon || '●',
-      viewType: data.viewType === 'kanban' ? 'kanban' : 'list',
+      icon: data.icon ?? entity.icon ?? '●',
+      viewType,
       updatedAt: now
     });
 
