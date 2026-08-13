@@ -32,3 +32,9 @@ window.ScheduleRepeatValidationMethods = {
     if (this.repeatMainValidationMessage) this.repeatMainValidationMessage.textContent = '';
   }
 };
+
+Object.assign(
+  window.ScheduleRepeatMethods,
+  window.ScheduleRepeatEndMethods || {},
+  window.ScheduleRepeatValidationMethods
+);
