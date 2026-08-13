@@ -161,6 +161,7 @@ Object.assign(window.AppDataService, {
         sourceContext.groupType === destinationContext.groupType &&
         sourceContext.groupKey !== destinationContext.groupKey;
       let tagChanged = false;
+      let repeatStateChanged = false;
       let nextTags = [...(moved.tags || [])];
       let rootProjectChanged = false;
 
@@ -170,7 +171,16 @@ Object.assign(window.AppDataService, {
           if (!['', 'low', 'medium', 'high'].includes(key)) throw new Error('Invalid priority destination.');
           moved.priority = key;
         } else if (destinationContext.groupType === 'date') {
-          moved.dueDate = key || null;
+          const nextDate = moved.repeat && moved.repeat.mode !== 'none'
+            ? (key || window.RepeatEngine.today())
+            : (key || null);
+          if (moved.dueDate !== nextDate && moved.repeat && moved.repeat.mode !== 'none') {
+            moved.repeatState = window.RepeatEngine.createInitialRepeatState(moved.repeat, nextDate, {
+              seriesId: this.createId('series'), occurrenceNumber: 1
+            });
+            repeatStateChanged = true;
+          }
+          moved.dueDate = nextDate;
         } else if (destinationContext.groupType === 'project') {
           if (targetLevel === 'root') {
             const nextProject = this.validateProjectId(key || '');
@@ -202,11 +212,18 @@ Object.assign(window.AppDataService, {
       const S = window.TodoDbSchema.STORES;
       const extraStores = [S.APP_SETTINGS];
       if (tagChanged) extraStores.push(S.TASK_TAGS);
+      if (repeatStateChanged) extraStores.push(S.TASK_REPEAT_RULES);
       await this.persistHierarchyCopies(copies, changed, async tx => {
         if (tagChanged) {
           await window.TodoRepositories.replaceRelations(
             tx, S.TASK_TAGS, 'by_task_id', task.id,
             nextTags.map(tagId => ({ taskId: task.id, tagId }))
+          );
+        }
+        if (repeatStateChanged) {
+          await window.TodoRepositories.put(
+            tx, S.TASK_REPEAT_RULES,
+            window.TodoStorageMappers.repeatToRow(moved.id, moved.repeat, moved.repeatState)
           );
         }
         await window.TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
