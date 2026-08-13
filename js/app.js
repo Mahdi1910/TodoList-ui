@@ -4,6 +4,11 @@
  */
 
 const BOOTSTRAP_SCRIPTS = [
+  'js/taxonomy-order.js',
+  'js/components/sidebar-taxonomy-drag-hierarchy.js',
+  'js/components/sidebar-taxonomy-drag-touch.js',
+  'js/components/sidebar-taxonomy-drag-commit.js',
+  'js/components/sidebar-taxonomy-drag.js',
   'js/components/task-drag-hierarchy.js',
   'js/repeat/repeat-engine.js',
   'js/components/schedule-repeat-end.js',
@@ -17,6 +22,7 @@ const BOOTSTRAP_SCRIPTS = [
   'js/storage/repeat-storage.js',
   'js/storage/data-service-repeat.js',
   'js/storage/data-service-taxonomy.js',
+  'js/storage/data-service-taxonomy-drag.js',
   'js/storage/data-service-drag.js',
   'js/storage/data-service-hierarchy.js',
   'js/storage/ui-persistence-bindings.js'
@@ -59,11 +65,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window.TasksComponent || !window.TaskDragHierarchyMethods) {
       throw new Error('Hierarchy drag component could not be loaded.');
     }
+    if (!window.SidebarComponent || !window.TaxonomyOrder ||
+        !window.SidebarTaxonomyDragMethods || !window.SidebarTaxonomyDragHierarchyMethods ||
+        !window.SidebarTaxonomyDragTouchMethods || !window.SidebarTaxonomyDragCommitMethods) {
+      throw new Error('Sidebar taxonomy hierarchy drag components could not be loaded.');
+    }
     if (!window.RepeatEngine || !window.ScheduleComponent ||
         !window.ScheduleRepeatEndMethods || !window.ScheduleRepeatValidationMethods) {
       throw new Error('Repeat recurrence components could not be loaded.');
     }
     Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods);
+    Object.assign(
+      window.SidebarComponent,
+      window.SidebarTaxonomyDragMethods,
+      window.SidebarTaxonomyDragHierarchyMethods,
+      window.SidebarTaxonomyDragTouchMethods,
+      window.SidebarTaxonomyDragCommitMethods
+    );
     Object.assign(
       window.ScheduleComponent,
       window.ScheduleRepeatEndMethods,
@@ -85,6 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   window.SidebarComponent.init();
+  window.SidebarComponent.initTaxonomyDrag();
   window.WorkspaceControls.init();
   window.TasksComponent.init();
   window.ScheduleComponent.init();
