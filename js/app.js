@@ -4,6 +4,7 @@
  */
 
 const BOOTSTRAP_SCRIPTS = [
+  'js/components/modal-focus.js',
   'js/taxonomy-order.js',
   'js/task-filter.js',
   'js/components/task-taxonomy-menu-order.js',
@@ -30,6 +31,15 @@ const BOOTSTRAP_SCRIPTS = [
   'js/storage/ui-persistence-bindings.js'
 ];
 
+const BOOTSTRAP_MESSAGES = {
+  MODULE_LOAD: 'A required application module could not be loaded.',
+  INTEGRATION: 'Application modules loaded, but one integration is incomplete.',
+  DATABASE_OPEN: 'TodoListDB could not be opened. Existing data was not cleared.',
+  DATABASE_REPAIR: 'Stored data could not be repaired safely. Existing data was not cleared.',
+  HYDRATION: 'Stored data could not be loaded into the application.',
+  UI_INIT: 'Data loaded, but the interface could not finish starting.'
+};
+
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[data-dynamic-src="${src}"]`)) return resolve();
@@ -42,76 +52,99 @@ function loadScript(src) {
   });
 }
 
-function showBootstrapError(error) {
-  console.error('Todo List startup failed.', error);
-  const banner = document.createElement('div');
-  banner.textContent = 'Local storage could not be opened. Your existing browser database was not cleared.';
-  Object.assign(banner.style, {
-    position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', zIndex: '9999',
-    maxWidth: 'min(560px, calc(100vw - 24px))', padding: '10px 14px', borderRadius: '10px',
-    background: '#171717', color: '#fff', border: '1px solid #444', boxShadow: '0 8px 30px rgba(0,0,0,.35)',
-    fontSize: '13px'
-  });
-  document.body.appendChild(banner);
+function reportBootstrapError(stage, error) {
+  const message = BOOTSTRAP_MESSAGES[stage] || 'The application could not finish starting.';
+  console.error(`[${stage}] ${message}`, error);
+  if (window.AppPersistence?.reportError) {
+    window.AppPersistence.reportError(message, error);
+    return;
+  }
+  let banner = document.getElementById('bootstrap-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'bootstrap-error-banner';
+    Object.assign(banner.style, {
+      position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', zIndex: '9999',
+      maxWidth: 'min(560px, calc(100vw - 24px))', padding: '10px 14px', borderRadius: '10px',
+      background: '#171717', color: '#fff', border: '1px solid #444', boxShadow: '0 8px 30px rgba(0,0,0,.35)',
+      fontSize: '13px'
+    });
+    document.body.appendChild(banner);
+  }
+  banner.textContent = message;
+}
+
+async function runStage(stage, work) {
+  try {
+    return await work();
+  } catch (error) {
+    reportBootstrapError(stage, error);
+    throw error;
+  }
+}
+
+function assertIntegrations() {
+  if (!window.ModalFocusManager) throw new Error('Modal focus manager could not be loaded.');
+  if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods || !window.TaskFilter) {
+    throw new Error('Task hierarchy/taxonomy/filter integration components could not be loaded.');
+  }
+  if (!window.SidebarComponent || !window.TaxonomyOrder ||
+      !window.SidebarTaxonomyDragMethods || !window.SidebarTaxonomyDragHierarchyMethods ||
+      !window.SidebarTaxonomyDragTouchMethods || !window.SidebarTaxonomyDragCommitMethods) {
+    throw new Error('Sidebar taxonomy hierarchy drag components could not be loaded.');
+  }
+  if (!window.RepeatEngine || !window.ScheduleComponent ||
+      !window.ScheduleRepeatEndMethods || !window.ScheduleRepeatValidationMethods) {
+    throw new Error('Repeat recurrence components could not be loaded.');
+  }
+}
+
+function installLateIntegrations() {
+  Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods, window.TaskTaxonomyMenuOrderMethods);
+  Object.assign(
+    window.SidebarComponent,
+    window.SidebarTaxonomyDragMethods,
+    window.SidebarTaxonomyDragHierarchyMethods,
+    window.SidebarTaxonomyDragTouchMethods,
+    window.SidebarTaxonomyDragCommitMethods
+  );
+  Object.assign(
+    window.ScheduleComponent,
+    window.ScheduleRepeatEndMethods,
+    window.ScheduleRepeatValidationMethods
+  );
+  window.ScheduleComponent.installRepeatEnhancements();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Theme remains on its existing localStorage strategy; domain data is IndexedDB-backed.
   window.ThemeManager.init();
 
   try {
-    for (const src of BOOTSTRAP_SCRIPTS) await loadScript(src);
-
-    // These modules are loaded after the static component aggregators, so install them
-    // on the live component objects before persistence bindings and UI initialization.
-    if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods || !window.TaskFilter) {
-      throw new Error('Task hierarchy/taxonomy/filter integration components could not be loaded.');
-    }
-    if (!window.SidebarComponent || !window.TaxonomyOrder ||
-        !window.SidebarTaxonomyDragMethods || !window.SidebarTaxonomyDragHierarchyMethods ||
-        !window.SidebarTaxonomyDragTouchMethods || !window.SidebarTaxonomyDragCommitMethods) {
-      throw new Error('Sidebar taxonomy hierarchy drag components could not be loaded.');
-    }
-    if (!window.RepeatEngine || !window.ScheduleComponent ||
-        !window.ScheduleRepeatEndMethods || !window.ScheduleRepeatValidationMethods) {
-      throw new Error('Repeat recurrence components could not be loaded.');
-    }
-    Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods, window.TaskTaxonomyMenuOrderMethods);
-    Object.assign(
-      window.SidebarComponent,
-      window.SidebarTaxonomyDragMethods,
-      window.SidebarTaxonomyDragHierarchyMethods,
-      window.SidebarTaxonomyDragTouchMethods,
-      window.SidebarTaxonomyDragCommitMethods
-    );
-    Object.assign(
-      window.ScheduleComponent,
-      window.ScheduleRepeatEndMethods,
-      window.ScheduleRepeatValidationMethods
-    );
-    window.ScheduleComponent.installRepeatEnhancements();
-
-    await window.AppPersistence.initialize();
-    await window.AppPersistence.hydrateState();
-    await window.AppDataService.repairRepeatState();
-    window.bindPersistentUiMutations();
-  } catch (error) {
-    if (window.AppPersistence?.reportError) {
-      window.AppPersistence.reportError('Local storage could not be opened. Existing data was not cleared.', error);
-    } else {
-      showBootstrapError(error);
-    }
+    await runStage('MODULE_LOAD', async () => {
+      for (const src of BOOTSTRAP_SCRIPTS) await loadScript(src);
+    });
+    await runStage('INTEGRATION', async () => {
+      assertIntegrations();
+      installLateIntegrations();
+      window.ModalFocusManager.init();
+    });
+    await runStage('DATABASE_OPEN', () => window.AppPersistence.initialize());
+    await runStage('HYDRATION', () => window.AppPersistence.hydrateState());
+    await runStage('DATABASE_REPAIR', () => window.AppDataService.repairRepeatState());
+    await runStage('INTEGRATION', async () => window.bindPersistentUiMutations());
+    await runStage('UI_INIT', async () => {
+      window.SidebarComponent.init();
+      window.SidebarComponent.initTaxonomyDrag();
+      window.WorkspaceControls.init();
+      window.TasksComponent.init();
+      window.ScheduleComponent.init();
+      window.ScheduleComponent.initRepeatEndUi();
+      window.SubtaskEditorComponent.init();
+      window.SettingsComponent.init();
+    });
+  } catch (_) {
     return;
   }
-
-  window.SidebarComponent.init();
-  window.SidebarComponent.initTaxonomyDrag();
-  window.WorkspaceControls.init();
-  window.TasksComponent.init();
-  window.ScheduleComponent.init();
-  window.ScheduleComponent.initRepeatEndUi();
-  window.SubtaskEditorComponent.init();
-  window.SettingsComponent.init();
 
   console.log('✅ Apple Minimalist To-Do List Application Initialized with IndexedDB persistence.');
 });
