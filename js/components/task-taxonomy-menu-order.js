@@ -13,14 +13,7 @@ window.TaskTaxonomyMenuOrderMethods = {
     this.menuProject.appendChild(inboxItem);
 
     window.TaxonomyOrder.flattenTree('project').forEach(({ item: project }) => {
-      const item = document.createElement('div');
-      item.className = `context-menu-item${project.id === this.selectedProject ? ' selected' : ''}`;
-      item.dataset.project = project.id;
-      item.innerHTML = `<span class="project-icon">${this.escapeText(project.icon)}</span> ${this.escapeText(project.name)}`;
-      item.setAttribute('role', 'option');
-      item.setAttribute('tabindex', '-1');
-      item.setAttribute('aria-selected', project.id === this.selectedProject ? 'true' : 'false');
-      this.menuProject.appendChild(item);
+      this.menuProject.appendChild(this.createProjectMenuItem(project));
     });
   },
 
@@ -29,15 +22,7 @@ window.TaskTaxonomyMenuOrderMethods = {
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
       window.TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
-        const item = document.createElement('div');
-        item.className = `context-menu-item multiselect${this.selectedTags.includes(tag.id) ? ' selected' : ''}`;
-        item.dataset.tag = tag.id;
-        item.style.paddingLeft = `${12 + depth * 16}px`;
-        item.innerHTML = `<span class="check-box-icon"></span><span>${this.escapeText(tag.icon)} ${this.escapeText(tag.name)}</span>`;
-        item.setAttribute('role', 'option');
-        item.setAttribute('tabindex', '-1');
-        item.setAttribute('aria-selected', this.selectedTags.includes(tag.id) ? 'true' : 'false');
-        this.menuTags.appendChild(item);
+        this.menuTags.appendChild(this.createTagMenuItem(tag, depth));
         renderLevel(tag.id, depth + 1);
       });
     };
