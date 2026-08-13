@@ -33,7 +33,7 @@ window.SettingsComponent = {
       <div class="settings-data-actions">
         <button type="button" class="btn-secondary" id="btn-create-backup">Create Backup</button>
         <button type="button" class="btn-secondary" id="btn-restore-backup">Restore Backup</button>
-        <input class="sr-only" type="file" id="restore-backup-input" accept="application/json,.json">
+        <input class="sr-only" type="file" id="restore-backup-input" accept="application/json,.json" tabindex="-1">
       </div>
       <p class="backup-restore-status" id="backup-restore-status" role="status" aria-live="polite"></p>
       <div class="restore-summary" id="restore-backup-summary" hidden tabindex="-1">
@@ -136,6 +136,7 @@ window.SettingsComponent = {
     this.restoreBackupBtn.disabled = busy;
     this.confirmRestoreBtn.disabled = busy;
     this.cancelRestoreBtn.disabled = busy;
+    if (this.themeToggle) this.themeToggle.disabled = busy;
   },
 
   async createBackup() {
