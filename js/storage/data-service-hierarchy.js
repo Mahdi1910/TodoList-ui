@@ -25,6 +25,7 @@ Object.assign(window.AppDataService, {
     const parent = window.AppState.getTask(parentId);
     if (!task) throw new Error('Task not found.');
     if (!parent || parent.parentTaskId) throw new Error('Parent must be a normal task.');
+    if (parent.completed) throw new Error('Completed tasks cannot be used as parent tasks.');
     if (task.id === parent.id) throw new Error('A task cannot be its own parent.');
     if (!task.parentTaskId && window.AppState.hasSubtasks(task.id)) {
       throw new Error('Move or unlink this task’s subtasks first.');
