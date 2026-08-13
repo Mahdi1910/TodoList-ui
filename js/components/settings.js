@@ -4,8 +4,6 @@
  */
 
 window.SettingsComponent = {
-  lastFocusedElement: null,
-
   init() {
     this.openBtn = document.getElementById('btn-open-settings');
     this.mobileOpenBtn = document.getElementById('btn-mobile-open-settings');
@@ -17,52 +15,36 @@ window.SettingsComponent = {
   },
 
   bindEvents() {
-    this.openBtn?.addEventListener('click', () => this.openModal());
-    this.mobileOpenBtn?.addEventListener('click', () => this.openModal());
+    this.openBtn?.addEventListener('click', event => this.openModal(event.currentTarget));
+    this.mobileOpenBtn?.addEventListener('click', event => this.openModal(event.currentTarget));
     this.closeBtn?.addEventListener('click', () => this.closeModal());
     this.saveBtn?.addEventListener('click', () => this.closeModal());
-    this.themeToggle?.addEventListener('change', e => {
-      window.ThemeManager.setTheme(e.target.checked ? 'light' : 'dark');
+    this.themeToggle?.addEventListener('change', event => {
+      window.ThemeManager.setTheme(event.target.checked ? 'light' : 'dark');
     });
-    this.modal?.addEventListener('click', e => {
-      if (e.target === this.modal) this.closeModal();
+    this.modal?.addEventListener('click', event => {
+      if (event.target === this.modal) this.closeModal();
     });
-    this.modal?.addEventListener('keydown', e => this.handleKeydown(e));
+    this.modal?.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeModal();
+      }
+    });
   },
 
-  openModal() {
-    this.lastFocusedElement = document.activeElement;
+  openModal(trigger = null) {
     if (this.themeToggle) this.themeToggle.checked = window.AppState.theme === 'light';
-    this.modal?.classList.add('active');
-    this.modal?.setAttribute('aria-hidden', 'false');
-    requestAnimationFrame(() => this.themeToggle?.focus());
+    window.ModalFocusManager.open(this.modal, {
+      trigger,
+      initialFocus: this.themeToggle,
+      fallbackFocus: trigger || this.openBtn || this.mobileOpenBtn
+    });
   },
 
   closeModal() {
-    this.modal?.classList.remove('active');
-    this.modal?.setAttribute('aria-hidden', 'true');
-    if (this.lastFocusedElement?.isConnected) this.lastFocusedElement.focus();
-    this.lastFocusedElement = null;
-  },
-
-  handleKeydown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.closeModal();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const focusable = [...this.modal.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])')]
-      .filter(el => !el.disabled && el.offsetParent !== null);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    window.ModalFocusManager.close(this.modal, {
+      fallbackFocus: this.openBtn || this.mobileOpenBtn
+    });
   }
 };
