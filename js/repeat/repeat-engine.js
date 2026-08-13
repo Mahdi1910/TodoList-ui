@@ -98,13 +98,14 @@ window.RepeatEngine = (() => {
   }
 
   function createInitialRepeatState(repeat, dueDate, previous = {}) {
-    const anchor = parseDate(dueDate) || parseDate(today());
+    const fallback = parseDate(dueDate) || parseDate(today());
+    const anchor = parseDate(previous.anchorDate) || fallback;
     return {
       seriesId: previous.seriesId || null,
       occurrenceNumber: Math.max(1, Number(previous.occurrenceNumber) || 1),
       anchorDate: formatDate(anchor),
-      anchorDay: anchor.getDate(),
-      anchorMonth: anchor.getMonth()
+      anchorDay: Number.isInteger(previous.anchorDay) ? previous.anchorDay : anchor.getDate(),
+      anchorMonth: Number.isInteger(previous.anchorMonth) ? previous.anchorMonth : anchor.getMonth()
     };
   }
 
