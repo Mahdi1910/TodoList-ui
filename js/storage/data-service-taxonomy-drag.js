@@ -80,6 +80,31 @@ Object.assign(window.AppDataService, {
     });
   },
 
+  prepareTaxonomyDelete(entityType, entityId) {
+    const { entity, config } = this.validateTaxonomyParent(entityType, entityId, null);
+    const copies = this.taxonomyCopies(config.type);
+    const changed = new Set();
+    const now = window.TodoStorageMappers.nowIso();
+    const sourceParentId = entity.parentId || null;
+    const childIds = this.taxonomySiblingIds(config.type, entity.id, null, copies);
+
+    if (sourceParentId === null) {
+      const rootIds = this.taxonomySiblingIds(config.type, null, null, copies);
+      const index = rootIds.indexOf(entity.id);
+      const nextRoots = rootIds.filter(id => id !== entity.id);
+      nextRoots.splice(index >= 0 ? index : nextRoots.length, 0, ...childIds);
+      this.applyTaxonomyScope(copies, null, nextRoots, changed, now);
+    } else {
+      const sourceIds = this.taxonomySiblingIds(config.type, sourceParentId, entity.id, copies);
+      this.applyTaxonomyScope(copies, sourceParentId, sourceIds, changed, now);
+      const rootIds = this.taxonomySiblingIds(config.type, null, entity.id, copies);
+      this.applyTaxonomyScope(copies, null, [...rootIds, ...childIds], changed, now);
+    }
+
+    changed.delete(entity.id);
+    return { entity, config, copies, changed, childIds, now };
+  },
+
   async updateTaxonomyEntityWithOrder(entityType, entityId, data = {}) {
     const { entity, config } = this.validateTaxonomyParent(entityType, entityId, data.parentId || null);
     const name = String(data.name ?? entity.name).trim();
