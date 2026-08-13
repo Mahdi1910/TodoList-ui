@@ -1,32 +1,58 @@
 Object.assign(window.AppDataService, {
   repairRepeatState() {
     return this.enqueue(async () => {
-      const changed = [];
-      for (const task of window.AppState.tasks) {
-        let dirty = false;
-        if (task.parentTaskId && !task.familySlotId) { task.familySlotId = this.createId('slot'); dirty = true; }
-        if (task.repeat && task.repeat.mode !== 'none') {
-          if (!task.dueDate) { task.dueDate = window.RepeatEngine.today(); dirty = true; }
-          const previous = task.repeatState || {};
-          if (!previous.seriesId || previous._needsRepair) {
-            task.repeatState = window.RepeatEngine.createInitialRepeatState(task.repeat, task.dueDate, previous);
-            task.repeatState.seriesId = previous.seriesId || this.createId('series');
-            dirty = true;
-          }
-          if (task.repeatState?._needsRepair) { delete task.repeatState._needsRepair; dirty = true; }
+      const repaired = window.AppState.tasks.flatMap(live => {
+        let familySlotId = live.familySlotId || null;
+        let dueDate = live.dueDate || null;
+        let repeatState = live.repeatState ? { ...live.repeatState } : null;
+        let changed = false;
+
+        if (live.parentTaskId && !familySlotId) {
+          familySlotId = this.createId('slot');
+          changed = true;
         }
-        if (dirty) changed.push(task);
-      }
-      if (!changed.length) return 0;
-      const S = window.TodoDbSchema.STORES, M = window.TodoStorageMappers, R = window.TodoRepositories;
-      await window.TodoDb.withTransaction([S.TASKS, S.TASK_REPEAT_RULES], 'readwrite', async tx => {
-        for (const task of changed) {
-          await R.put(tx, S.TASKS, M.taskToRow(task));
-          const row = M.repeatToRow(task.id, task.repeat, task.repeatState);
-          if (row) await R.put(tx, S.TASK_REPEAT_RULES, row); else await R.remove(tx, S.TASK_REPEAT_RULES, task.id);
+        if (live.repeat && live.repeat.mode !== 'none') {
+          if (!dueDate) {
+            dueDate = window.RepeatEngine.today();
+            changed = true;
+          }
+          const previous = repeatState || {};
+          if (!previous.seriesId || previous._needsRepair) {
+            repeatState = window.RepeatEngine.createInitialRepeatState(live.repeat, dueDate, previous);
+            repeatState.seriesId = previous.seriesId || this.createId('series');
+            changed = true;
+          }
+          if (repeatState?._needsRepair) {
+            const { _needsRepair, ...cleanState } = repeatState;
+            repeatState = cleanState;
+            changed = true;
+          }
+        }
+        if (!changed) return [];
+        return [{
+          ...live,
+          familySlotId,
+          dueDate,
+          repeatState,
+          tags: [...(live.tags || [])],
+          reminders: [...(live.reminders || [])]
+        }];
+      });
+
+      if (!repaired.length) return 0;
+      const stores = window.TodoDbSchema.STORES;
+      await window.TodoDb.withTransaction([stores.TASKS, stores.TASK_REPEAT_RULES], 'readwrite', async tx => {
+        for (const task of repaired) {
+          await window.TodoRepositories.put(tx, stores.TASKS, window.TodoStorageMappers.taskToRow(task));
+          const row = window.TodoStorageMappers.repeatToRow(task.id, task.repeat, task.repeatState);
+          if (row) await window.TodoRepositories.put(tx, stores.TASK_REPEAT_RULES, row);
         }
       });
-      return changed.length;
+
+      const byId = new Map(repaired.map(task => [task.id, task]));
+      window.AppState.tasks = window.AppState.tasks.map(task => byId.get(task.id) || task);
+      window.AppState.rebuildTaskOrder();
+      return repaired.length;
     });
   }
 });

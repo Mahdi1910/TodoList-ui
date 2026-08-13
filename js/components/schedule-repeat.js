@@ -1,8 +1,10 @@
 window.ScheduleRepeatMethods = {
   selectRepeatPreset(presetMode) {
-    if (!this.draftRepeat) this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
-    this.draftRepeat.mode = presetMode;
+    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule({ ...(this.draftRepeat || {}), mode: presetMode });
+    if (presetMode !== 'none' && !this.draftDate) this.selectDate(window.RepeatEngine.today());
+    this.clearRepeatValidationError?.();
     this.renderRepeatPresetList();
+    this.renderRepeatEndRow?.();
     this.updateRepeatSummary();
   },
 
@@ -25,28 +27,26 @@ window.ScheduleRepeatMethods = {
 
   updateRepeatSummary() {
     if (!this.repeatSummaryText) return;
-    const mode = this.draftRepeat?.mode || 'none';
-    if (mode === 'none') this.repeatSummaryText.textContent = 'Does not repeat';
-    else if (mode === 'daily') this.repeatSummaryText.textContent = 'Repeats daily';
-    else if (mode === 'weekly') this.repeatSummaryText.textContent = 'Repeats weekly';
-    else if (mode === 'monthly') this.repeatSummaryText.textContent = 'Repeats monthly';
-    else if (mode === 'yearly') this.repeatSummaryText.textContent = 'Repeats yearly';
-    else if (mode === 'custom') {
-      const custom = this.draftRepeat.custom || { interval: 1, unit: 'day' };
-      const unitLabel = custom.interval === 1 ? custom.unit : `${custom.unit}s`;
-      let text = `Repeats every ${custom.interval} ${unitLabel}`;
-      if (custom.unit === 'week' && custom.weekdays?.length) {
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        text += ` on ${custom.weekdays.sort((a, b) => a - b).map(day => dayNames[day]).join(', ')}`;
-      } else if (custom.unit === 'month' && custom.monthDays?.length) {
-        text += ` on the ${custom.monthDays.sort((a, b) => a - b).map(day => `${day}${this.getOrdinalSuffix(day)}`).join(', ')}`;
-      } else if (custom.unit === 'year' && custom.yearDates && Object.keys(custom.yearDates).length) {
-        let count = 0;
-        Object.values(custom.yearDates).forEach(days => count += days.length);
-        text += ` across ${count} date${count > 1 ? 's' : ''}`;
-      }
-      this.repeatSummaryText.textContent = text;
+    const repeat = window.RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    if (repeat.mode === 'none') return void (this.repeatSummaryText.textContent = 'Does not repeat');
+    if (repeat.mode === 'daily') return void (this.repeatSummaryText.textContent = 'Repeats daily');
+    if (repeat.mode === 'weekly') return void (this.repeatSummaryText.textContent = 'Repeats weekly');
+    if (repeat.mode === 'monthly') return void (this.repeatSummaryText.textContent = 'Repeats monthly');
+    if (repeat.mode === 'yearly') return void (this.repeatSummaryText.textContent = 'Repeats yearly');
+
+    const custom = repeat.custom;
+    const unitLabel = custom.interval === 1 ? custom.unit : `${custom.unit}s`;
+    let text = `Repeats every ${custom.interval} ${unitLabel}`;
+    if (custom.unit === 'week' && custom.weekdays.length) {
+      const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      text += ` on ${[...custom.weekdays].sort((a, b) => a - b).map(day => names[day]).join(', ')}`;
+    } else if (custom.unit === 'month' && custom.monthDays.length) {
+      text += ` on the ${[...custom.monthDays].sort((a, b) => a - b).map(day => `${day}${this.getOrdinalSuffix(day)}`).join(', ')}`;
+    } else if (custom.unit === 'year') {
+      const total = Object.values(custom.yearDates).reduce((sum, days) => sum + days.length, 0);
+      if (total) text += ` across ${total} date${total > 1 ? 's' : ''}`;
     }
+    this.repeatSummaryText.textContent = text;
   },
 
   getOrdinalSuffix(value) {
@@ -59,20 +59,14 @@ window.ScheduleRepeatMethods = {
 
   openCustomRepeatModal() {
     if (!this.customRepeatModal) return;
-    this.customRepeatSnapshot = JSON.parse(JSON.stringify(
-      this.draftRepeat || { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } }
-    ));
-    if (!this.draftRepeat) this.draftRepeat = { mode: 'custom', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
-    this.draftRepeat.mode = 'custom';
-    if (!this.draftRepeat.custom) this.draftRepeat.custom = { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} };
+    this.customRepeatSnapshot = window.RepeatEngine.clone(this.draftRepeat);
+    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule({ ...(this.draftRepeat || {}), mode: 'custom' });
     const custom = this.draftRepeat.custom;
-    const intervalIndex = Math.max(0, custom.interval - 1);
     const units = ['day', 'week', 'month', 'year'];
-    const unitIndex = Math.max(0, units.indexOf(custom.unit));
     requestAnimationFrame(() => {
       this.scrollWheelToIndex(this.wheelRepeatLabel, 0, false, '');
-      this.scrollWheelToIndex(this.wheelRepeatInterval, intervalIndex, false, 'repeatInterval');
-      this.scrollWheelToIndex(this.wheelRepeatUnit, unitIndex, false, 'repeatUnit');
+      this.scrollWheelToIndex(this.wheelRepeatInterval, Math.max(0, custom.interval - 1), false, 'repeatInterval');
+      this.scrollWheelToIndex(this.wheelRepeatUnit, Math.max(0, units.indexOf(custom.unit)), false, 'repeatUnit');
     });
     this.updateCustomRepeatSubviews(custom.unit);
     window.ModalFocusManager.open(this.customRepeatModal, {
@@ -84,15 +78,21 @@ window.ScheduleRepeatMethods = {
 
   closeCustomRepeatModal(commit = false) {
     if (!this.customRepeatModal?.classList.contains('active')) return;
-    if (!commit && this.customRepeatSnapshot) this.draftRepeat = JSON.parse(JSON.stringify(this.customRepeatSnapshot));
+    if (!commit && this.customRepeatSnapshot) this.draftRepeat = window.RepeatEngine.clone(this.customRepeatSnapshot);
     window.ModalFocusManager.close(this.customRepeatModal, { fallbackFocus: this.btnOpenCustomRepeat });
     this.customRepeatSnapshot = null;
     this.renderRepeatPresetList();
+    this.renderRepeatEndRow?.();
     this.updateRepeatSummary();
   },
 
   submitCustomRepeat() {
-    this.draftRepeat.mode = 'custom';
+    const candidate = window.RepeatEngine.normalizeRepeatRule({ ...this.draftRepeat, mode: 'custom' });
+    const check = window.RepeatEngine.validateRepeatRule(candidate);
+    if (!check.valid) return this.showRepeatValidationError?.(check.message);
+    this.clearRepeatValidationError?.();
+    this.draftRepeat = check.repeat;
+    if (!this.draftDate) this.selectDate(window.RepeatEngine.today());
     this.closeCustomRepeatModal(true);
   },
 
@@ -112,14 +112,12 @@ window.ScheduleRepeatMethods = {
     if (!this.subviewRepeatWeek) return;
     const selectedDays = this.draftRepeat.custom.weekdays || [];
     this.subviewRepeatWeek.querySelectorAll('.weekday-circle-btn').forEach(button => {
-      const day = parseInt(button.dataset.day, 10);
-      button.setAttribute('aria-pressed', selectedDays.includes(day) ? 'true' : 'false');
+      button.setAttribute('aria-pressed', selectedDays.includes(parseInt(button.dataset.day, 10)) ? 'true' : 'false');
     });
   },
 
   toggleCustomRepeatWeekday(day) {
-    if (!this.draftRepeat.custom.weekdays) this.draftRepeat.custom.weekdays = [];
-    const values = this.draftRepeat.custom.weekdays;
+    const values = this.draftRepeat.custom.weekdays || [];
     this.draftRepeat.custom.weekdays = values.includes(day) ? values.filter(value => value !== day) : [...values, day];
     this.renderCustomRepeatWeekdays();
   }
