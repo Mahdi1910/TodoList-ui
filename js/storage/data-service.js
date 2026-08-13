@@ -1,30 +1,25 @@
 window.AppDataService = {
   _writeQueue: Promise.resolve(),
-
   enqueue(work) {
     const run = this._writeQueue.then(work, work);
     this._writeQueue = run.catch(() => {});
     return run;
   },
-
   createId(prefix) {
     const value = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     return `${prefix}-${value}`;
   },
-
   validateProjectId(projectId) {
     if (!projectId) return '';
     if (!window.AppState.getProject(projectId)) throw new Error('The selected project no longer exists.');
     return projectId;
   },
-
   validateTagIds(tagIds = []) {
     return [...new Set(tagIds)].filter(Boolean).map(tagId => {
       if (!window.AppState.getTag(tagId)) throw new Error('A selected tag no longer exists.');
       return tagId;
     });
   },
-
   resolveReminders(reminders = []) {
     const ids = [...new Set(reminders)].filter(id => id && id !== 'none');
     const builtin = new Set(window.TodoStorageMappers.BUILTIN_REMINDERS.map(item => item.id));
@@ -36,13 +31,11 @@ window.AppDataService = {
       const match = id.match(/^custom-(\d+)d-(\d+)h-(\d+)m$/);
       if (!match) throw new Error(`Unknown reminder: ${id}`);
       const day = Number(match[1]), hr = Number(match[2]), min = Number(match[3]);
-      const parts = [];
-      if (day) parts.push(`${day}d`); if (hr) parts.push(`${hr}h`); if (min) parts.push(`${min}m`);
+      const parts = []; if (day) parts.push(`${day}d`); if (hr) parts.push(`${hr}h`); if (min) parts.push(`${min}m`);
       definitions.push(window.TodoStorageMappers.customReminderToDefinition({ id, day, hr, min, label: `${parts.join(' ')} before` }));
     }
     return { ids, definitions: definitions.filter(Boolean) };
   },
-
   nextRootSortOrder() {
     const values = window.AppState.getRootTasks().map(task => task.sortOrder).filter(Number.isFinite);
     return values.length ? Math.min(...values) - 1 : 0;
@@ -53,6 +46,7 @@ window.AppDataService = {
   },
 
   buildTask(taskData = {}, existing = null) {
+    const engine = window.RepeatEngine;
     const now = window.TodoStorageMappers.nowIso();
     const parentId = existing?.parentTaskId || taskData.parentTaskId || null;
     const parent = parentId ? window.AppState.validateParentTaskId(parentId) : null;
@@ -64,31 +58,41 @@ window.AppDataService = {
     const reminderData = this.resolveReminders(taskData.reminders ?? existing?.reminders ?? []);
     const priority = taskData.priority ?? existing?.priority ?? '';
     if (!['', 'low', 'medium', 'high'].includes(priority)) throw new Error('Invalid task priority.');
-    return {
-      task: window.AppState.normalizeTask({
-        id: existing?.id || this.createId('task'), title,
-        description: String(taskData.description ?? existing?.description ?? ''), project,
-        parentTaskId: parent?.id || null, priority, tags,
-        reminders: reminderData.ids.length ? reminderData.ids : ['none'],
-        repeat: taskData.repeat !== undefined ? taskData.repeat : (existing?.repeat || null),
-        dueDate: taskData.dueDate !== undefined ? taskData.dueDate : (existing?.dueDate || null),
-        dueTime: taskData.dueTime !== undefined ? taskData.dueTime : (existing?.dueTime || null),
-        completed: existing?.completed || false,
-        sortOrder: existing?.sortOrder ?? (parent ? this.nextSubtaskSortOrder(parent.id) : this.nextRootSortOrder()),
-        createdAt: existing?.createdAt || now, updatedAt: now
-      }),
-      reminderDefinitions: reminderData.definitions
-    };
+    const selectedRepeat = taskData.repeat !== undefined ? taskData.repeat : existing?.repeat;
+    const repeat = engine.normalizeRepeatRule(selectedRepeat);
+    let dueDate = taskData.dueDate !== undefined ? taskData.dueDate : (existing?.dueDate || null);
+    if (repeat.mode !== 'none' && !dueDate) dueDate = engine.today();
+    const task = window.AppState.normalizeTask({
+      id: existing?.id || this.createId('task'), title,
+      description: String(taskData.description ?? existing?.description ?? ''), project,
+      parentTaskId: parent?.id || null,
+      familySlotId: parent ? (existing?.familySlotId || taskData.familySlotId || this.createId('slot')) : null,
+      priority, tags, reminders: reminderData.ids.length ? reminderData.ids : ['none'],
+      repeat: repeat.mode === 'none' ? null : repeat,
+      dueDate, dueTime: taskData.dueTime !== undefined ? taskData.dueTime : (existing?.dueTime || null),
+      completed: existing?.completed || false,
+      sortOrder: existing?.sortOrder ?? (parent ? this.nextSubtaskSortOrder(parent.id) : this.nextRootSortOrder()),
+      createdAt: existing?.createdAt || now, updatedAt: now
+    });
+    if (!task.repeat) task.repeatState = null;
+    else {
+      const preserve = existing?.repeat && existing?.repeatState && engine.samePattern(existing.repeat, task.repeat) && existing.dueDate === task.dueDate;
+      task.repeatState = preserve
+        ? { ...existing.repeatState, _needsRepair: false }
+        : engine.createInitialRepeatState(task.repeat, task.dueDate, { seriesId: this.createId('series'), occurrenceNumber: 1 });
+      task.repeatState.seriesId ||= this.createId('series');
+    }
+    return { task, reminderDefinitions: reminderData.definitions };
   },
 
   async writeTaskAggregate(tx, task, reminderDefinitions = []) {
-    const S = window.TodoDbSchema.STORES, R = window.TodoRepositories;
-    await R.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(task));
-    await R.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', task.id, task.tags.map(tagId => ({ taskId: task.id, tagId })));
+    const S = window.TodoDbSchema.STORES, R = window.TodoRepositories, M = window.TodoStorageMappers;
+    await R.put(tx, S.TASKS, M.taskToRow(task));
+    await R.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', task.id, (task.tags || []).map(tagId => ({ taskId: task.id, tagId })));
     await R.putMany(tx, S.REMINDER_DEFINITIONS, reminderDefinitions);
-    const reminderIds = task.reminders.filter(id => id && id !== 'none');
+    const reminderIds = (task.reminders || []).filter(id => id && id !== 'none');
     await R.replaceRelations(tx, S.TASK_REMINDERS, 'by_task_id', task.id, reminderIds.map((reminderId, sortOrder) => ({ taskId: task.id, reminderId, sortOrder })));
-    const repeatRow = window.TodoStorageMappers.repeatToRow(task.id, task.repeat);
+    const repeatRow = M.repeatToRow(task.id, task.repeat, task.repeatState);
     if (repeatRow) await R.put(tx, S.TASK_REPEAT_RULES, repeatRow); else await R.remove(tx, S.TASK_REPEAT_RULES, task.id);
   },
 
@@ -100,7 +104,6 @@ window.AppDataService = {
       window.AppState.tasks.push(task); window.AppState.rebuildTaskOrder(); return task;
     });
   },
-
   updateTask(taskId, taskData = {}) {
     return this.enqueue(async () => {
       const existing = window.AppState.getTask(taskId); if (!existing) throw new Error('Task not found.');
@@ -117,17 +120,6 @@ window.AppDataService = {
       window.AppState.rebuildTaskOrder(); return task;
     });
   },
-
-  toggleTaskStatus(taskId) {
-    return this.enqueue(async () => {
-      const task = window.AppState.getTask(taskId); if (!task) throw new Error('Task not found.');
-      const updated = { ...task, completed: !task.completed, updatedAt: window.TodoStorageMappers.nowIso() };
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction(S.TASKS, 'readwrite', tx => window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(updated)));
-      task.completed = updated.completed; task.updatedAt = updated.updatedAt; return task;
-    });
-  },
-
   deleteTaskFamily(taskId) {
     return this.enqueue(async () => {
       const task = window.AppState.getTask(taskId); if (!task) return false;
@@ -144,7 +136,6 @@ window.AppDataService = {
       const idSet = new Set(ids); window.AppState.tasks = window.AppState.tasks.filter(item => !idSet.has(item.id)); return true;
     });
   },
-
   setSetting(key, value) {
     return this.enqueue(async () => {
       const S = window.TodoDbSchema.STORES;
