@@ -11,7 +11,7 @@ window.SidebarTaxonomyDragCommitMethods = {
   async commitTaxonomyDrag() {
     const session = this.taxonomyDragSession;
     if (!session) return;
-    if (this.isTaxonomyPreviewUnchanged(session)) {
+    if (session.dropDomainActive === false || this.isTaxonomyPreviewUnchanged(session)) {
       this.cleanupTaxonomyDrag(true);
       return;
     }
