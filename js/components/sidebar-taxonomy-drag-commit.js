@@ -67,6 +67,7 @@ window.SidebarTaxonomyDragCommitMethods = {
     }
     this.syncCurrentView();
     this.updateCounts();
+    window.TasksComponent?.render();
   },
 
   captureTaxonomyRects(hosts) {
