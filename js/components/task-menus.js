@@ -1,4 +1,44 @@
 window.TaskMenuMethods = {
+  createProjectMenuItem(project) {
+    const item = document.createElement('div');
+    const selected = project.id === this.selectedProject;
+    item.className = `context-menu-item${selected ? ' selected' : ''}`;
+    item.dataset.project = project.id;
+    item.setAttribute('role', 'option');
+    item.setAttribute('tabindex', '-1');
+    item.setAttribute('aria-selected', selected ? 'true' : 'false');
+
+    const icon = document.createElement('span');
+    icon.className = 'project-icon';
+    icon.textContent = String(project.icon ?? '');
+
+    const label = document.createElement('span');
+    label.textContent = String(project.name ?? '');
+
+    item.append(icon, document.createTextNode(' '), label);
+    return item;
+  },
+
+  createTagMenuItem(tag, depth = 0) {
+    const item = document.createElement('div');
+    const selected = this.selectedTags.includes(tag.id);
+    item.className = `context-menu-item multiselect${selected ? ' selected' : ''}`;
+    item.dataset.tag = tag.id;
+    item.style.paddingLeft = `${12 + depth * 16}px`;
+    item.setAttribute('role', 'option');
+    item.setAttribute('tabindex', '-1');
+    item.setAttribute('aria-selected', selected ? 'true' : 'false');
+
+    const check = document.createElement('span');
+    check.className = 'check-box-icon';
+
+    const label = document.createElement('span');
+    label.textContent = `${String(tag.icon ?? '')} ${String(tag.name ?? '')}`;
+
+    item.append(check, label);
+    return item;
+  },
+
   renderProjectMenu() {
     if (!this.menuProject) return;
     this.menuProject.innerHTML = '';
@@ -13,14 +53,7 @@ window.TaskMenuMethods = {
     this.menuProject.appendChild(inboxItem);
 
     window.AppState.projects.forEach(project => {
-      const item = document.createElement('div');
-      item.className = `context-menu-item${project.id === this.selectedProject ? ' selected' : ''}`;
-      item.dataset.project = project.id;
-      item.innerHTML = `<span class="project-icon">${project.icon}</span> ${this.escapeText(project.name)}`;
-      item.setAttribute('role', 'option');
-      item.setAttribute('tabindex', '-1');
-      item.setAttribute('aria-selected', project.id === this.selectedProject ? 'true' : 'false');
-      this.menuProject.appendChild(item);
+      this.menuProject.appendChild(this.createProjectMenuItem(project));
     });
   },
 
@@ -29,15 +62,7 @@ window.TaskMenuMethods = {
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
       window.AppState.tags.filter(tag => (tag.parentId || null) === parentId).forEach(tag => {
-        const item = document.createElement('div');
-        item.className = `context-menu-item multiselect${this.selectedTags.includes(tag.id) ? ' selected' : ''}`;
-        item.dataset.tag = tag.id;
-        item.style.paddingLeft = `${12 + depth * 16}px`;
-        item.innerHTML = `<span class="check-box-icon"></span><span>${this.escapeText(tag.icon)} ${this.escapeText(tag.name)}</span>`;
-        item.setAttribute('role', 'option');
-        item.setAttribute('tabindex', '-1');
-        item.setAttribute('aria-selected', this.selectedTags.includes(tag.id) ? 'true' : 'false');
-        this.menuTags.appendChild(item);
+        this.menuTags.appendChild(this.createTagMenuItem(tag, depth));
         renderLevel(tag.id, depth + 1);
       });
     };
@@ -99,12 +124,6 @@ window.TaskMenuMethods = {
       });
       item.addEventListener('keydown', e => this.handleMenuKeydown(e, item, this.menuTags, 'multi', 'tag'));
     });
-  },
-
-  escapeText(value) {
-    const div = document.createElement('div');
-    div.textContent = value;
-    return div.textContent;
   },
 
   bindContextMenu(trigger, menu, mode, key) {
