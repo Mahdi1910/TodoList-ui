@@ -2,25 +2,43 @@ window.SidebarProjectMethods = {
   renderProjects() {
     if (!this.projectListEl) return;
     this.projectListEl.innerHTML = '';
-    const renderLevel = (parentId, depth = 0) => {
-      window.AppState.projects.filter(project => (project.parentId || null) === parentId).forEach(project => {
-        const item = document.createElement('div');
-        item.className = 'sidebar-nav-item project-nav-item';
-        item.dataset.project = project.id;
-        item.dataset.projectId = project.id;
-        item.dataset.title = project.name;
-        item.style.paddingLeft = `${8 + depth * 18}px`;
-        item.innerHTML = `<span class="item-left"><span class="project-icon">${project.icon}</span><span class="project-name">${this.escapeHtml(project.name)}</span></span><span class="project-nav-right"><span class="item-count">${window.AppState.countProject(project.id)}</span><button type="button" class="project-more-btn" data-project-menu="${project.id}" aria-label="More options for ${this.escapeHtml(project.name)}">⋯</button></span><div class="project-more-menu" data-project-menu-panel="${project.id}"><button type="button" data-project-add-child="${project.id}">Add Sub-project</button><button type="button" data-project-edit="${project.id}">Edit</button><button type="button" data-project-delete="${project.id}">Delete</button></div>`;
-        item.querySelector('[data-project-menu]').addEventListener('click', e => {
-          e.stopPropagation();
-          this.toggleSidebarActionMenu(item.querySelector('[data-project-menu-panel]'));
-        });
-        this.projectListEl.appendChild(item);
-        renderLevel(project.id, depth + 1);
-      });
-    };
-    renderLevel(null);
+    this.projectListEl.classList.add('sidebar-tree-root');
+    this.projectListEl.dataset.taxonomyType = 'project';
+    this.projectListEl.dataset.treeParentId = '';
+    window.TaxonomyOrder.getChildren('project', null)
+      .forEach(project => this.projectListEl.appendChild(this.createProjectTreeNode(project, 0)));
   },
+
+  createProjectTreeNode(project, depth = 0) {
+    const node = document.createElement('div');
+    node.className = 'sidebar-tree-node project-tree-node';
+    node.dataset.taxonomyType = 'project';
+    node.dataset.entityId = project.id;
+    node.dataset.parentId = project.parentId || '';
+    node.dataset.depth = String(depth);
+
+    const item = document.createElement('div');
+    item.className = 'sidebar-nav-item project-nav-item';
+    item.dataset.project = project.id;
+    item.dataset.projectId = project.id;
+    item.dataset.title = project.name;
+    item.innerHTML = `<span class="item-left"><span class="project-icon">${this.escapeHtml(project.icon)}</span><span class="project-name">${this.escapeHtml(project.name)}</span></span><span class="project-nav-right"><span class="item-count">${window.AppState.countProject(project.id)}</span><button type="button" class="project-more-btn" data-project-menu="${project.id}" aria-label="More options for ${this.escapeHtml(project.name)}">⋯</button></span><div class="project-more-menu" data-project-menu-panel="${project.id}"><button type="button" data-project-add-child="${project.id}">Add Sub-project</button><button type="button" data-project-edit="${project.id}">Edit</button><button type="button" data-project-delete="${project.id}">Delete</button></div>`;
+    item.querySelector('[data-project-menu]').addEventListener('click', e => {
+      e.stopPropagation();
+      this.toggleSidebarActionMenu(item.querySelector('[data-project-menu-panel]'));
+    });
+
+    const children = document.createElement('div');
+    children.className = 'sidebar-tree-children';
+    children.dataset.taxonomyType = 'project';
+    children.dataset.treeParentId = project.id;
+    window.TaxonomyOrder.getChildren('project', project.id)
+      .forEach(child => children.appendChild(this.createProjectTreeNode(child, depth + 1)));
+
+    node.append(item, children);
+    return node;
+  },
+
   openProjectModal(projectId = null, parentId = null) {
     this.editingProjectId = projectId;
     const project = projectId ? window.AppState.getProject(projectId) : null;
@@ -36,10 +54,11 @@ window.SidebarProjectMethods = {
 
     if (this.projectParentSelect) {
       this.projectParentSelect.innerHTML = '<option value="">No parent (top-level project)</option>';
-      window.AppState.projects.filter(candidate => candidate.id !== projectId && !window.AppState.isProjectDescendant(candidate.id, projectId)).forEach(candidate => {
+      window.TaxonomyOrder.flattenTree('project').forEach(({ item: candidate, depth }) => {
+        if (candidate.id === projectId || window.AppState.isProjectDescendant(candidate.id, projectId)) return;
         const option = document.createElement('option');
         option.value = candidate.id;
-        option.textContent = `${candidate.icon} ${candidate.name}`;
+        option.textContent = `${'  '.repeat(depth)}${candidate.icon} ${candidate.name}`;
         this.projectParentSelect.appendChild(option);
       });
       this.projectParentSelect.value = project?.parentId || parentId || '';
@@ -71,6 +90,7 @@ window.SidebarProjectMethods = {
     this.projectIconTrigger.setAttribute('aria-expanded', 'false');
     this.projectNameInput?.focus();
   },
+
   saveProject() {
     const name = this.projectNameInput.value.trim();
     if (!name) return this.projectNameInput.reportValidity();
