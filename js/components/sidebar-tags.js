@@ -2,25 +2,43 @@ window.SidebarTagMethods = {
   renderTags() {
     if (!this.tagListEl) return;
     this.tagListEl.innerHTML = '';
-    const renderLevel = (parentId, depth = 0) => {
-      window.AppState.tags.filter(tag => (tag.parentId || null) === parentId).forEach(tag => {
-        const item = document.createElement('div');
-        item.className = 'sidebar-nav-item tag-nav-item';
-        item.dataset.tag = tag.id;
-        item.dataset.tagId = tag.id;
-        item.dataset.title = tag.name;
-        item.style.paddingLeft = `${8 + depth * 18}px`;
-        item.innerHTML = `<span class="item-left"><span class="tag-icon">${this.escapeHtml(tag.icon)}</span><span class="tag-name">${this.escapeHtml(tag.name)}</span></span><span class="tag-nav-right"><span class="item-count">${window.AppState.countTag(tag.id)}</span><button type="button" class="tag-more-btn" data-tag-menu="${tag.id}" aria-label="More options for ${this.escapeHtml(tag.name)}">⋯</button></span><div class="tag-more-menu" data-tag-menu-panel="${tag.id}"><button type="button" data-tag-add-child="${tag.id}">Add Sub-tag</button><button type="button" data-tag-edit="${tag.id}">Edit</button><button type="button" data-tag-delete="${tag.id}">Delete</button></div>`;
-        item.querySelector('[data-tag-menu]').addEventListener('click', e => {
-          e.stopPropagation();
-          this.toggleSidebarActionMenu(item.querySelector('[data-tag-menu-panel]'));
-        });
-        this.tagListEl.appendChild(item);
-        renderLevel(tag.id, depth + 1);
-      });
-    };
-    renderLevel(null);
+    this.tagListEl.classList.add('sidebar-tree-root');
+    this.tagListEl.dataset.taxonomyType = 'tag';
+    this.tagListEl.dataset.treeParentId = '';
+    window.TaxonomyOrder.getChildren('tag', null)
+      .forEach(tag => this.tagListEl.appendChild(this.createTagTreeNode(tag, 0)));
   },
+
+  createTagTreeNode(tag, depth = 0) {
+    const node = document.createElement('div');
+    node.className = 'sidebar-tree-node tag-tree-node';
+    node.dataset.taxonomyType = 'tag';
+    node.dataset.entityId = tag.id;
+    node.dataset.parentId = tag.parentId || '';
+    node.dataset.depth = String(depth);
+
+    const item = document.createElement('div');
+    item.className = 'sidebar-nav-item tag-nav-item';
+    item.dataset.tag = tag.id;
+    item.dataset.tagId = tag.id;
+    item.dataset.title = tag.name;
+    item.innerHTML = `<span class="item-left"><span class="tag-icon">${this.escapeHtml(tag.icon)}</span><span class="tag-name">${this.escapeHtml(tag.name)}</span></span><span class="tag-nav-right"><span class="item-count">${window.AppState.countTag(tag.id)}</span><button type="button" class="tag-more-btn" data-tag-menu="${tag.id}" aria-label="More options for ${this.escapeHtml(tag.name)}">⋯</button></span><div class="tag-more-menu" data-tag-menu-panel="${tag.id}"><button type="button" data-tag-add-child="${tag.id}">Add Sub-tag</button><button type="button" data-tag-edit="${tag.id}">Edit</button><button type="button" data-tag-delete="${tag.id}">Delete</button></div>`;
+    item.querySelector('[data-tag-menu]').addEventListener('click', e => {
+      e.stopPropagation();
+      this.toggleSidebarActionMenu(item.querySelector('[data-tag-menu-panel]'));
+    });
+
+    const children = document.createElement('div');
+    children.className = 'sidebar-tree-children';
+    children.dataset.taxonomyType = 'tag';
+    children.dataset.treeParentId = tag.id;
+    window.TaxonomyOrder.getChildren('tag', tag.id)
+      .forEach(child => children.appendChild(this.createTagTreeNode(child, depth + 1)));
+
+    node.append(item, children);
+    return node;
+  },
+
   openTagModal(tagId = null, parentId = null) {
     this.editingTagId = tagId;
     const tag = tagId ? window.AppState.getTag(tagId) : null;
@@ -34,10 +52,11 @@ window.SidebarTagMethods = {
     this.tagIconTrigger.setAttribute('aria-expanded', 'false');
     this.tagIconPicker.querySelectorAll('[data-icon]').forEach(button => button.classList.toggle('selected', button.dataset.icon === this.selectedTagIcon));
     this.tagParentSelect.innerHTML = '<option value="">No parent (top-level tag)</option>';
-    window.AppState.tags.filter(candidate => candidate.id !== tagId && !window.AppState.isTagDescendant(candidate.id, tagId)).forEach(candidate => {
+    window.TaxonomyOrder.flattenTree('tag').forEach(({ item: candidate, depth }) => {
+      if (candidate.id === tagId || window.AppState.isTagDescendant(candidate.id, tagId)) return;
       const option = document.createElement('option');
       option.value = candidate.id;
-      option.textContent = `${candidate.icon} ${candidate.name}`;
+      option.textContent = `${'  '.repeat(depth)}${candidate.icon} ${candidate.name}`;
       this.tagParentSelect.appendChild(option);
     });
     this.tagParentSelect.value = tag?.parentId || parentId || '';
@@ -68,6 +87,7 @@ window.SidebarTagMethods = {
     this.tagIconTrigger.setAttribute('aria-expanded', 'false');
     this.tagNameInput?.focus();
   },
+
   saveTag() {
     const name = this.tagNameInput.value.trim();
     if (!name) return this.tagNameInput.reportValidity();
