@@ -82,7 +82,7 @@ window.SubtaskEditorComponent = {
     if (!parent) return;
     this.editingSubtaskId = task.id;
     this.parentTaskId = parent.id;
-    const normalized = window.AppState.normalizeTask(task);
+    const normalized = window.TaskModel.normalizeTask(task);
     this.titleInput.value = normalized.title;
     this.descInput.value = normalized.description || '';
     this.selectedPriority = normalized.priority || '';
@@ -137,10 +137,14 @@ window.SubtaskEditorComponent = {
     const title = this.titleInput?.value.trim();
     if (!title) return this.titleInput?.reportValidity();
     const payload = {
-      title, description: this.descInput?.value.trim() || '', dueDate: this.selectedDueDate,
-      dueTime: this.selectedDueTime, reminders: [...this.selectedReminders],
+      title,
+      description: this.descInput?.value.trim() || '',
+      dueDate: this.selectedDueDate,
+      dueTime: this.selectedDueTime,
+      reminders: [...this.selectedReminders],
       repeat: this.selectedRepeat ? JSON.parse(JSON.stringify(this.selectedRepeat)) : null,
-      priority: this.selectedPriority, tags: [...this.selectedTags]
+      priority: this.selectedPriority,
+      tags: [...this.selectedTags]
     };
     this.btnSubmit.disabled = true;
     try {

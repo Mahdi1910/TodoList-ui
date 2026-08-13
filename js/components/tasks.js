@@ -139,11 +139,15 @@ window.TasksComponent = {
   async submitTask() {
     if (!this.titleInput?.value.trim()) return this.titleInput?.reportValidity();
     const payload = {
-      title: this.titleInput.value.trim(), description: this.descInput?.value.trim() || '',
-      dueDate: this.selectedDueDate, dueTime: this.selectedDueTime,
+      title: this.titleInput.value.trim(),
+      description: this.descInput?.value.trim() || '',
+      dueDate: this.selectedDueDate,
+      dueTime: this.selectedDueTime,
       reminders: [...this.selectedReminders],
       repeat: this.selectedRepeat ? JSON.parse(JSON.stringify(this.selectedRepeat)) : null,
-      project: this.selectedProject, priority: this.selectedPriority, tags: [...this.selectedTags]
+      project: this.selectedProject,
+      priority: this.selectedPriority,
+      tags: [...this.selectedTags]
     };
     this.submitTaskBtn.disabled = true;
     try {
@@ -181,7 +185,7 @@ window.TasksComponent = {
       return;
     }
     if (taskToEdit) {
-      const normalized = window.AppState.normalizeTask(taskToEdit);
+      const normalized = window.TaskModel.normalizeTask(taskToEdit);
       this.editingTaskId = normalized.id;
       this.titleInput.value = normalized.title;
       this.descInput.value = normalized.description || '';

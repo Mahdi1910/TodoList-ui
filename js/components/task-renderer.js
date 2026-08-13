@@ -16,7 +16,6 @@ window.TaskRendererMethods = {
     const groupKey = window.WorkspaceControls?.groupKey || 'none';
     if (groupKey === 'none') this.setDropLaneContext(this.activeListEl, 'active', 'none', 'all');
     else this.clearDropLaneContext(this.activeListEl);
-
     this.activeListEl.innerHTML = '';
     this.activeEmptyStateEl.style.display = activeTasks.length ? 'none' : 'flex';
     if (activeTasks.length) {
@@ -26,7 +25,6 @@ window.TaskRendererMethods = {
       } else this.renderTaskGroups(activeTasks, groupKey);
     }
     this.activeCountEl.textContent = `${activeTasks.length} ${activeTasks.length === 1 ? 'task' : 'tasks'}`;
-
     const orderedCompleted = window.WorkspaceControls?.sortTasks(completedTasks) || [...completedTasks];
     this.completedListEl.innerHTML = '';
     this.completedSectionEl.classList.toggle('has-tasks', orderedCompleted.length > 0);
@@ -88,12 +86,11 @@ window.TaskRendererMethods = {
 
   createTaskCard(task, options = {}) {
     const { isSubtask = false, compact = false, hideProjectMeta = false, showExpander = false, subtaskListId = '' } = options;
-    const normalized = window.AppState.normalizeTask(task);
+    const normalized = window.TaskModel.normalizeTask(task);
     const logicalIsSubtask = Boolean(normalized.parentTaskId);
     const card = document.createElement('div');
     card.className = `task-card${normalized.completed ? ' completed' : ''}${isSubtask ? ' subtask-card' : ''}${compact ? ' compact-subtask-card' : ''}`;
     card.dataset.id = normalized.id;
-
     const left = document.createElement('div');
     left.className = 'task-left';
     if (showExpander) left.appendChild(this.createSubtaskExpander(normalized, subtaskListId));
@@ -110,7 +107,6 @@ window.TaskRendererMethods = {
     checkIcon.setAttribute('aria-hidden', 'true');
     checkIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />';
     checkboxWrapper.append(checkbox, checkIcon);
-
     const details = document.createElement('div');
     details.className = 'task-details';
     details.tabIndex = 0;
@@ -140,7 +136,6 @@ window.TaskRendererMethods = {
     actions.className = 'task-actions';
     actions.appendChild(this.createTaskMoreButton(normalized));
     card.append(left, actions);
-
     const handleEditTrigger = event => {
       if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
       if (event.type === 'keydown') event.preventDefault();
@@ -187,7 +182,7 @@ window.TaskRendererMethods = {
       let text = `🔁 Every ${custom.interval} ${unitLabel}`;
       if (custom.unit === 'week' && custom.weekdays?.length) {
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        text += ` on ${custom.weekdays.sort((a, b) => a - b).map(day => dayNames[day]).join(', ')}`;
+        text += ` on ${[...custom.weekdays].sort((a, b) => a - b).map(day => dayNames[day]).join(', ')}`;
       }
       return text;
     }
