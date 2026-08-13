@@ -5,6 +5,7 @@
 
 const BOOTSTRAP_SCRIPTS = [
   'js/taxonomy-order.js',
+  'js/components/task-taxonomy-menu-order.js',
   'js/components/sidebar-taxonomy-drag-hierarchy.js',
   'js/components/sidebar-taxonomy-drag-touch.js',
   'js/components/sidebar-taxonomy-drag-commit.js',
@@ -62,8 +63,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // These modules are loaded after the static component aggregators, so install them
     // on the live component objects before persistence bindings and UI initialization.
-    if (!window.TasksComponent || !window.TaskDragHierarchyMethods) {
-      throw new Error('Hierarchy drag component could not be loaded.');
+    if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods) {
+      throw new Error('Task hierarchy/taxonomy integration components could not be loaded.');
     }
     if (!window.SidebarComponent || !window.TaxonomyOrder ||
         !window.SidebarTaxonomyDragMethods || !window.SidebarTaxonomyDragHierarchyMethods ||
@@ -74,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         !window.ScheduleRepeatEndMethods || !window.ScheduleRepeatValidationMethods) {
       throw new Error('Repeat recurrence components could not be loaded.');
     }
-    Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods);
+    Object.assign(window.TasksComponent, window.TaskDragHierarchyMethods, window.TaskTaxonomyMenuOrderMethods);
     Object.assign(
       window.SidebarComponent,
       window.SidebarTaxonomyDragMethods,
