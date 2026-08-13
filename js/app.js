@@ -5,6 +5,7 @@
 
 const BOOTSTRAP_SCRIPTS = [
   'js/taxonomy-order.js',
+  'js/task-filter.js',
   'js/components/task-taxonomy-menu-order.js',
   'js/components/sidebar-taxonomy-drag-hierarchy.js',
   'js/components/sidebar-taxonomy-drag-touch.js',
@@ -63,8 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // These modules are loaded after the static component aggregators, so install them
     // on the live component objects before persistence bindings and UI initialization.
-    if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods) {
-      throw new Error('Task hierarchy/taxonomy integration components could not be loaded.');
+    if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods || !window.TaskFilter) {
+      throw new Error('Task hierarchy/taxonomy/filter integration components could not be loaded.');
     }
     if (!window.SidebarComponent || !window.TaxonomyOrder ||
         !window.SidebarTaxonomyDragMethods || !window.SidebarTaxonomyDragHierarchyMethods ||
