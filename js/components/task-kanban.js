@@ -5,16 +5,15 @@ window.TaskKanbanMethods = {
     this.kanbanBoardEl.innerHTML = '';
     if (!this.collapsedKanbanCompletedGroups) this.collapsedKanbanCompletedGroups = new Set();
 
-    const roots = window.AppState.getRootTasks(tasks);
-    const hasTasks = roots.length > 0;
+    const hasTasks = tasks.length > 0;
     this.kanbanBoardEl.hidden = !hasTasks;
     this.kanbanEmptyStateEl.style.display = hasTasks ? 'none' : 'flex';
     if (!hasTasks) return;
 
     const groupKey = window.WorkspaceControls?.groupKey || 'none';
     const groups = groupKey === 'none'
-      ? [{ key: 'all', label: '', tasks: [...roots] }]
-      : this.getTaskGroups(roots, groupKey);
+      ? [{ key: 'all', label: '', tasks: [...tasks] }]
+      : this.getTaskGroups(tasks, groupKey);
 
     this.kanbanBoardEl.classList.toggle('single-column', groupKey === 'none');
     groups.forEach((group, columnIndex) => {
@@ -40,7 +39,7 @@ window.TaskKanbanMethods = {
     this.setDropLaneContext(activeList, 'active', groupKey, group.key);
     const activeTasks = group.tasks.filter(task => !task.completed);
     const orderedActive = window.WorkspaceControls?.sortTasks(activeTasks) || [...activeTasks];
-    orderedActive.forEach(task => activeList.appendChild(this.createTaskFamily(task)));
+    orderedActive.forEach(task => activeList.appendChild(this.createTaskDisplayUnit(task)));
     column.appendChild(activeList);
 
     const completedTasks = group.tasks.filter(task => task.completed);
@@ -73,7 +72,7 @@ window.TaskKanbanMethods = {
     completedList.id = completedListId;
     completedList.className = 'kanban-task-list kanban-completed-list';
     const orderedCompleted = window.WorkspaceControls?.sortTasks(completedTasks) || [...completedTasks];
-    orderedCompleted.forEach(task => completedList.appendChild(this.createTaskFamily(task)));
+    orderedCompleted.forEach(task => completedList.appendChild(this.createTaskDisplayUnit(task)));
 
     const syncCompletedState = isCollapsed => {
       completedList.hidden = isCollapsed;
