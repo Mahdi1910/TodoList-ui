@@ -5,8 +5,7 @@ window.SidebarTagMethods = {
     this.tagListEl.classList.add('sidebar-tree-root');
     this.tagListEl.dataset.taxonomyType = 'tag';
     this.tagListEl.dataset.treeParentId = '';
-    window.TaxonomyOrder.getChildren('tag', null)
-      .forEach(tag => this.tagListEl.appendChild(this.createTagTreeNode(tag, 0)));
+    window.TaxonomyOrder.getChildren('tag', null).forEach(tag => this.tagListEl.appendChild(this.createTagTreeNode(tag, 0)));
   },
 
   createTagTreeNode(tag, depth = 0) {
@@ -16,30 +15,26 @@ window.SidebarTagMethods = {
     node.dataset.entityId = tag.id;
     node.dataset.parentId = tag.parentId || '';
     node.dataset.depth = String(depth);
-
     const item = document.createElement('div');
     item.className = 'sidebar-nav-item tag-nav-item';
     item.dataset.tag = tag.id;
     item.dataset.tagId = tag.id;
     item.dataset.title = tag.name;
     item.innerHTML = `<span class="item-left"><span class="tag-icon">${this.escapeHtml(tag.icon)}</span><span class="tag-name">${this.escapeHtml(tag.name)}</span></span><span class="tag-nav-right"><span class="item-count">${window.AppState.countTag(tag.id)}</span><button type="button" class="tag-more-btn" data-tag-menu="${tag.id}" aria-label="More options for ${this.escapeHtml(tag.name)}">⋯</button></span><div class="tag-more-menu" data-tag-menu-panel="${tag.id}"><button type="button" data-tag-add-child="${tag.id}">Add Sub-tag</button><button type="button" data-tag-edit="${tag.id}">Edit</button><button type="button" data-tag-delete="${tag.id}">Delete</button></div>`;
-    item.querySelector('[data-tag-menu]').addEventListener('click', e => {
-      e.stopPropagation();
+    item.querySelector('[data-tag-menu]').addEventListener('click', event => {
+      event.stopPropagation();
       this.toggleSidebarActionMenu(item.querySelector('[data-tag-menu-panel]'));
     });
-
     const children = document.createElement('div');
     children.className = 'sidebar-tree-children';
     children.dataset.taxonomyType = 'tag';
     children.dataset.treeParentId = tag.id;
-    window.TaxonomyOrder.getChildren('tag', tag.id)
-      .forEach(child => children.appendChild(this.createTagTreeNode(child, depth + 1)));
-
+    window.TaxonomyOrder.getChildren('tag', tag.id).forEach(child => children.appendChild(this.createTagTreeNode(child, depth + 1)));
     node.append(item, children);
     return node;
   },
 
-  openTagModal(tagId = null, parentId = null) {
+  openTagModal(tagId = null, parentId = null, trigger = null) {
     this.editingTagId = tagId;
     const tag = tagId ? window.AppState.getTag(tagId) : null;
     this.tagModalTitle.textContent = tag ? 'Edit Tag' : 'New Tag';
@@ -67,16 +62,14 @@ window.SidebarTagMethods = {
       button.onclick = () => {
         this.selectedTagView = button.dataset.tagView;
         this.tagModal.querySelectorAll('[data-tag-view]').forEach(option => {
-          const isSelected = option === button;
-          option.classList.toggle('selected', isSelected);
-          option.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+          const active = option === button;
+          option.classList.toggle('selected', active);
+          option.setAttribute('aria-checked', active ? 'true' : 'false');
         });
       };
     });
-    this.tagModal.classList.add('active');
-    this.tagModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
-    requestAnimationFrame(() => this.tagNameInput?.focus());
+    window.ModalFocusManager.open(this.tagModal, { trigger, initialFocus: this.tagNameInput, fallbackFocus: '#btn-add-tag' });
   },
 
   selectTagIcon(icon) {
@@ -88,38 +81,49 @@ window.SidebarTagMethods = {
     this.tagNameInput?.focus();
   },
 
-  saveTag() {
+  async saveTag() {
     const name = this.tagNameInput.value.trim();
     if (!name) return this.tagNameInput.reportValidity();
-    const parentId = this.tagParentSelect.value || null;
-    const data = { name, icon: this.selectedTagIcon, viewType: this.selectedTagView, parentId };
-    if (this.editingTagId) window.AppState.updateTag(this.editingTagId, data);
-    else window.AppState.addTag(data);
-    this.closeTagModal();
-    this.renderTags();
-    window.TasksComponent?.renderTagMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    const data = { name, icon: this.selectedTagIcon, viewType: this.selectedTagView, parentId: this.tagParentSelect.value || null };
+    this.tagSaveBtn.disabled = true;
+    try {
+      if (this.editingTagId) await window.AppDataService.updateTag(this.editingTagId, data);
+      else await window.AppDataService.createTag(data);
+      this.closeTagModal();
+      this.renderTags();
+      window.TasksComponent?.renderTagMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+      document.getElementById('btn-add-tag')?.focus();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save this tag.', error);
+    } finally {
+      this.tagSaveBtn.disabled = false;
+    }
   },
 
-  deleteTag(tagId) {
+  async deleteTag(tagId) {
     const tag = window.AppState.getTag(tagId);
     if (!tag) return;
     if (!window.confirm(`Delete tag "${tag.name}"? Child tags will become top-level tags.`)) return;
-    window.AppState.deleteTag(tagId);
-    this.renderTags();
-    window.TasksComponent?.renderTagMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    try {
+      await window.AppDataService.deleteTag(tagId);
+      this.renderTags();
+      window.TasksComponent?.renderTagMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not delete this tag.', error);
+    }
   },
 
   closeTagModal() {
-    this.tagModal?.classList.remove('active');
-    this.tagModal?.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('modal-open');
+    if (!this.tagModal?.classList.contains('active')) return;
     this.tagIconPicker?.classList.remove('open');
+    window.ModalFocusManager.close(this.tagModal, { fallbackFocus: '#btn-add-tag' });
+    document.body.classList.remove('modal-open');
     this.editingTagId = null;
-  },
+  }
 };

@@ -5,8 +5,7 @@ window.SidebarProjectMethods = {
     this.projectListEl.classList.add('sidebar-tree-root');
     this.projectListEl.dataset.taxonomyType = 'project';
     this.projectListEl.dataset.treeParentId = '';
-    window.TaxonomyOrder.getChildren('project', null)
-      .forEach(project => this.projectListEl.appendChild(this.createProjectTreeNode(project, 0)));
+    window.TaxonomyOrder.getChildren('project', null).forEach(project => this.projectListEl.appendChild(this.createProjectTreeNode(project, 0)));
   },
 
   createProjectTreeNode(project, depth = 0) {
@@ -16,30 +15,26 @@ window.SidebarProjectMethods = {
     node.dataset.entityId = project.id;
     node.dataset.parentId = project.parentId || '';
     node.dataset.depth = String(depth);
-
     const item = document.createElement('div');
     item.className = 'sidebar-nav-item project-nav-item';
     item.dataset.project = project.id;
     item.dataset.projectId = project.id;
     item.dataset.title = project.name;
     item.innerHTML = `<span class="item-left"><span class="project-icon">${this.escapeHtml(project.icon)}</span><span class="project-name">${this.escapeHtml(project.name)}</span></span><span class="project-nav-right"><span class="item-count">${window.AppState.countProject(project.id)}</span><button type="button" class="project-more-btn" data-project-menu="${project.id}" aria-label="More options for ${this.escapeHtml(project.name)}">⋯</button></span><div class="project-more-menu" data-project-menu-panel="${project.id}"><button type="button" data-project-add-child="${project.id}">Add Sub-project</button><button type="button" data-project-edit="${project.id}">Edit</button><button type="button" data-project-delete="${project.id}">Delete</button></div>`;
-    item.querySelector('[data-project-menu]').addEventListener('click', e => {
-      e.stopPropagation();
+    item.querySelector('[data-project-menu]').addEventListener('click', event => {
+      event.stopPropagation();
       this.toggleSidebarActionMenu(item.querySelector('[data-project-menu-panel]'));
     });
-
     const children = document.createElement('div');
     children.className = 'sidebar-tree-children';
     children.dataset.taxonomyType = 'project';
     children.dataset.treeParentId = project.id;
-    window.TaxonomyOrder.getChildren('project', project.id)
-      .forEach(child => children.appendChild(this.createProjectTreeNode(child, depth + 1)));
-
+    window.TaxonomyOrder.getChildren('project', project.id).forEach(child => children.appendChild(this.createProjectTreeNode(child, depth + 1)));
     node.append(item, children);
     return node;
   },
 
-  openProjectModal(projectId = null, parentId = null) {
+  openProjectModal(projectId = null, parentId = null, trigger = null) {
     this.editingProjectId = projectId;
     const project = projectId ? window.AppState.getProject(projectId) : null;
     this.projectModalTitle.textContent = project ? 'Edit Project' : 'New Project';
@@ -51,7 +46,6 @@ window.SidebarProjectMethods = {
     this.projectIconPicker.classList.remove('open');
     this.projectIconTrigger.setAttribute('aria-expanded', 'false');
     this.projectIconPicker.querySelectorAll('[data-icon]').forEach(button => button.classList.toggle('selected', button.dataset.icon === this.selectedProjectIcon));
-
     if (this.projectParentSelect) {
       this.projectParentSelect.innerHTML = '<option value="">No parent (top-level project)</option>';
       window.TaxonomyOrder.flattenTree('project').forEach(({ item: candidate, depth }) => {
@@ -70,16 +64,14 @@ window.SidebarProjectMethods = {
       button.onclick = () => {
         this.selectedProjectView = button.dataset.view;
         this.projectModal.querySelectorAll('.project-view-option').forEach(option => {
-          const isSelected = option === button;
-          option.classList.toggle('selected', isSelected);
-          option.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+          const active = option === button;
+          option.classList.toggle('selected', active);
+          option.setAttribute('aria-checked', active ? 'true' : 'false');
         });
       };
     });
-    this.projectModal.classList.add('active');
-    this.projectModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
-    requestAnimationFrame(() => this.projectNameInput?.focus());
+    window.ModalFocusManager.open(this.projectModal, { trigger, initialFocus: this.projectNameInput, fallbackFocus: '#btn-add-project' });
   },
 
   selectProjectIcon(icon) {
@@ -91,38 +83,49 @@ window.SidebarProjectMethods = {
     this.projectNameInput?.focus();
   },
 
-  saveProject() {
+  async saveProject() {
     const name = this.projectNameInput.value.trim();
     if (!name) return this.projectNameInput.reportValidity();
-    const parentId = this.projectParentSelect?.value || null;
-    const data = { name, icon: this.selectedProjectIcon, viewType: this.selectedProjectView, parentId };
-    if (this.editingProjectId) window.AppState.updateProject(this.editingProjectId, data);
-    else window.AppState.addProject(data);
-    this.closeProjectModal();
-    this.renderProjects();
-    window.TasksComponent?.renderProjectMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    const data = { name, icon: this.selectedProjectIcon, viewType: this.selectedProjectView, parentId: this.projectParentSelect?.value || null };
+    this.projectSaveBtn.disabled = true;
+    try {
+      if (this.editingProjectId) await window.AppDataService.updateProject(this.editingProjectId, data);
+      else await window.AppDataService.createProject(data);
+      this.closeProjectModal();
+      this.renderProjects();
+      window.TasksComponent?.renderProjectMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+      document.getElementById('btn-add-project')?.focus();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save this project.', error);
+    } finally {
+      this.projectSaveBtn.disabled = false;
+    }
   },
 
-  deleteProject(projectId) {
+  async deleteProject(projectId) {
     const project = window.AppState.getProject(projectId);
     if (!project) return;
     if (!window.confirm(`Delete project "${project.name}"? Its direct sub-projects will become top-level.`)) return;
-    window.AppState.deleteProject(projectId);
-    this.renderProjects();
-    window.TasksComponent?.renderProjectMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    try {
+      await window.AppDataService.deleteProject(projectId);
+      this.renderProjects();
+      window.TasksComponent?.renderProjectMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not delete this project.', error);
+    }
   },
 
   closeProjectModal() {
-    this.projectModal?.classList.remove('active');
-    this.projectModal?.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('modal-open');
+    if (!this.projectModal?.classList.contains('active')) return;
     this.projectIconPicker?.classList.remove('open');
+    window.ModalFocusManager.close(this.projectModal, { fallbackFocus: '#btn-add-project' });
+    document.body.classList.remove('modal-open');
     this.editingProjectId = null;
-  },
+  }
 };

@@ -23,9 +23,7 @@ window.TaskRendererMethods = {
       if (groupKey === 'none') {
         const ordered = window.WorkspaceControls?.sortTasks(activeTasks) || [...activeTasks];
         ordered.forEach(task => this.activeListEl.appendChild(this.createTaskDisplayUnit(task)));
-      } else {
-        this.renderTaskGroups(activeTasks, groupKey);
-      }
+      } else this.renderTaskGroups(activeTasks, groupKey);
     }
     this.activeCountEl.textContent = `${activeTasks.length} ${activeTasks.length === 1 ? 'task' : 'tasks'}`;
 
@@ -41,11 +39,7 @@ window.TaskRendererMethods = {
     if (this.completedSectionToggle || !this.completedSectionEl) return;
     const header = this.completedSectionEl.querySelector(':scope > .section-header-title');
     if (!header) return;
-
-    if (typeof this.completedSectionCollapsed !== 'boolean') {
-      this.completedSectionCollapsed = false;
-    }
-
+    if (typeof this.completedSectionCollapsed !== 'boolean') this.completedSectionCollapsed = false;
     const label = header.querySelector('span:first-child');
     const count = this.completedCountEl || header.querySelector('#completed-tasks-count');
     const button = document.createElement('button');
@@ -54,14 +48,12 @@ window.TaskRendererMethods = {
     button.setAttribute('aria-controls', 'completed-task-list');
     button.setAttribute('aria-expanded', 'true');
     button.setAttribute('aria-label', 'Collapse completed tasks');
-
     if (label) button.appendChild(label);
     else {
       const fallbackLabel = document.createElement('span');
       fallbackLabel.textContent = 'Completed';
       button.appendChild(fallbackLabel);
     }
-
     const meta = document.createElement('span');
     meta.className = 'completed-section-toggle-meta';
     if (count) meta.appendChild(count);
@@ -72,7 +64,6 @@ window.TaskRendererMethods = {
     meta.appendChild(chevron);
     button.appendChild(meta);
     header.replaceWith(button);
-
     this.completedSectionToggle = button;
     this.completedSectionChevron = chevron;
     button.addEventListener('click', () => this.toggleCompletedSection());
@@ -80,35 +71,23 @@ window.TaskRendererMethods = {
 
   toggleCompletedSection() {
     this.completedSectionCollapsed = !this.completedSectionCollapsed;
-    const hasTasks = this.completedSectionEl?.classList.contains('has-tasks') || false;
-    this.syncCompletedSectionState(hasTasks);
+    this.syncCompletedSectionState(this.completedSectionEl?.classList.contains('has-tasks') || false);
   },
 
   syncCompletedSectionState(hasTasks) {
     if (!this.completedListEl) return;
     const expanded = Boolean(hasTasks && !this.completedSectionCollapsed);
     this.completedListEl.hidden = !expanded;
-
     if (expanded) this.setDropLaneContext(this.completedListEl, 'completed', 'none', 'all');
     else this.clearDropLaneContext(this.completedListEl);
-
     if (!this.completedSectionToggle) return;
     this.completedSectionToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    this.completedSectionToggle.setAttribute(
-      'aria-label',
-      expanded ? 'Collapse completed tasks' : 'Expand completed tasks'
-    );
+    this.completedSectionToggle.setAttribute('aria-label', expanded ? 'Collapse completed tasks' : 'Expand completed tasks');
     if (this.completedSectionChevron) this.completedSectionChevron.textContent = expanded ? '▾' : '▸';
   },
 
   createTaskCard(task, options = {}) {
-    const {
-      isSubtask = false,
-      compact = false,
-      hideProjectMeta = false,
-      showExpander = false,
-      subtaskListId = ''
-    } = options;
+    const { isSubtask = false, compact = false, hideProjectMeta = false, showExpander = false, subtaskListId = '' } = options;
     const normalized = window.AppState.normalizeTask(task);
     const logicalIsSubtask = Boolean(normalized.parentTaskId);
     const card = document.createElement('div');
@@ -118,7 +97,6 @@ window.TaskRendererMethods = {
     const left = document.createElement('div');
     left.className = 'task-left';
     if (showExpander) left.appendChild(this.createSubtaskExpander(normalized, subtaskListId));
-
     const checkboxWrapper = document.createElement('div');
     checkboxWrapper.className = 'task-checkbox-wrapper';
     const checkbox = document.createElement('input');
@@ -135,64 +113,57 @@ window.TaskRendererMethods = {
 
     const details = document.createElement('div');
     details.className = 'task-details';
-    details.setAttribute('tabindex', '0');
+    details.tabIndex = 0;
     details.setAttribute('role', 'button');
     details.setAttribute('aria-label', `Edit ${logicalIsSubtask ? 'subtask' : 'task'}: ${normalized.title}`);
-    details.setAttribute('title',
-      `Click or press Enter to edit ${logicalIsSubtask ? 'subtask' : 'task'}`);
+    details.title = `Click or press Enter to edit ${logicalIsSubtask ? 'subtask' : 'task'}`;
     const title = document.createElement('span');
     title.className = 'task-title';
     title.textContent = normalized.title;
     details.appendChild(title);
-
     if (normalized.description && !compact) {
       const description = document.createElement('span');
       description.className = 'task-description';
       description.textContent = normalized.description;
       details.appendChild(description);
     }
-
     const meta = document.createElement('div');
     meta.className = 'task-meta';
-    if (normalized.dueDate || normalized.dueTime) {
-      meta.appendChild(this.createBadge(this.formatScheduleLabel(normalized.dueDate, normalized.dueTime), 'due-date'));
-    }
-    if (normalized.repeat && normalized.repeat.mode !== 'none' && !compact) {
-      meta.appendChild(this.createBadge(this.formatRepeatLabel(normalized.repeat), 'repeat'));
-    }
+    if (normalized.dueDate || normalized.dueTime) meta.appendChild(this.createBadge(this.formatScheduleLabel(normalized.dueDate, normalized.dueTime), 'due-date'));
+    if (normalized.repeat && normalized.repeat.mode !== 'none' && !compact) meta.appendChild(this.createBadge(this.formatRepeatLabel(normalized.repeat), 'repeat'));
     if (normalized.priority) meta.appendChild(this.createBadge(normalized.priority, `priority-${normalized.priority}`));
-    if (normalized.project && !hideProjectMeta) {
-      const projectName = window.AppState.getProject(normalized.project)?.name || 'Unknown Project';
-      meta.appendChild(this.createBadge(projectName));
-    }
-    normalized.tags.forEach(tagId => {
-      const tagName = window.AppState.getTag(tagId)?.name || 'Unknown Tag';
-      meta.appendChild(this.createBadge(`#${tagName}`));
-    });
+    if (normalized.project && !hideProjectMeta) meta.appendChild(this.createBadge(window.AppState.getProject(normalized.project)?.name || 'Unknown Project'));
+    normalized.tags.forEach(tagId => meta.appendChild(this.createBadge(`#${window.AppState.getTag(tagId)?.name || 'Unknown Tag'}`)));
     details.appendChild(meta);
     left.append(checkboxWrapper, details);
-
     const actions = document.createElement('div');
     actions.className = 'task-actions';
     actions.appendChild(this.createTaskMoreButton(normalized));
     card.append(left, actions);
 
-    const handleEditTrigger = e => {
-      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
-      if (e.type === 'keydown') e.preventDefault();
-      e.stopPropagation();
+    const handleEditTrigger = event => {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+      if (event.type === 'keydown') event.preventDefault();
+      event.stopPropagation();
       this.closeTaskActionMenu(false);
       if (logicalIsSubtask) window.SubtaskEditorComponent?.openEdit(normalized.id, details);
-      else this.openModal(normalized);
+      else this.openModal(normalized, details);
     };
     details.addEventListener('click', handleEditTrigger);
     details.addEventListener('keydown', handleEditTrigger);
-    checkboxWrapper.addEventListener('click', e => e.stopPropagation());
-
-    checkbox.addEventListener('change', e => {
-      e.stopPropagation();
-      window.AppState.toggleTaskStatus(normalized.id);
-      this.refreshAfterTaskMutation();
+    checkboxWrapper.addEventListener('click', event => event.stopPropagation());
+    checkbox.addEventListener('change', async event => {
+      event.stopPropagation();
+      const previous = !checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await window.AppDataService.toggleTaskStatus(normalized.id);
+        this.refreshAfterTaskMutation();
+      } catch (error) {
+        checkbox.checked = previous;
+        checkbox.disabled = false;
+        window.AppPersistence?.reportError('Could not save the task completion change.', error);
+      }
     });
     return card;
   },
@@ -206,18 +177,17 @@ window.TaskRendererMethods = {
 
   formatRepeatLabel(repeatObj) {
     if (!repeatObj || repeatObj.mode === 'none') return '';
-    const mode = repeatObj.mode;
-    if (mode === 'daily') return '🔁 Daily';
-    if (mode === 'weekly') return '🔁 weekly';
-    if (mode === 'monthly') return '🔁 Monthly';
-    if (mode === 'yearly') return '🔁 Yearly';
-    if (mode === 'custom') {
+    if (repeatObj.mode === 'daily') return '🔁 Daily';
+    if (repeatObj.mode === 'weekly') return '🔁 weekly';
+    if (repeatObj.mode === 'monthly') return '🔁 Monthly';
+    if (repeatObj.mode === 'yearly') return '🔁 Yearly';
+    if (repeatObj.mode === 'custom') {
       const custom = repeatObj.custom || { interval: 1, unit: 'day' };
       const unitLabel = custom.interval === 1 ? custom.unit : `${custom.unit}s`;
       let text = `🔁 Every ${custom.interval} ${unitLabel}`;
       if (custom.unit === 'week' && custom.weekdays?.length) {
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        text += ` on ${custom.weekdays.sort((a, b) => a - b).map(d => dayNames[d]).join(', ')}`;
+        text += ` on ${custom.weekdays.sort((a, b) => a - b).map(day => dayNames[day]).join(', ')}`;
       }
       return text;
     }
@@ -229,18 +199,15 @@ window.TaskRendererMethods = {
     if (dateStr) {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      if (dateStr === todayStr) {
-        datePart = 'Today';
-      } else {
+      if (dateStr === todayStr) datePart = 'Today';
+      else {
         const tomorrow = new Date(now);
         tomorrow.setDate(now.getDate() + 1);
         const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-        if (dateStr === tomorrowStr) {
-          datePart = 'Tomorrow';
-        } else {
+        if (dateStr === tomorrowStr) datePart = 'Tomorrow';
+        else {
           const parts = dateStr.split('-').map(Number);
-          datePart = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
-            .format(new Date(parts[0], parts[1] - 1, parts[2]));
+          datePart = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(parts[0], parts[1] - 1, parts[2]));
         }
       }
     }
@@ -258,7 +225,6 @@ window.TaskRendererMethods = {
     const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
     if (dateStr === tomorrowStr) return 'Tomorrow';
     const parts = dateStr.split('-').map(Number);
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
-      .format(new Date(parts[0], parts[1] - 1, parts[2]));
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(parts[0], parts[1] - 1, parts[2]));
   }
 };

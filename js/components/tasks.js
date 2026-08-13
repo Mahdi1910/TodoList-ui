@@ -7,7 +7,6 @@ window.TasksComponent = {
   selectedDueTime: null,
   selectedReminders: ['on_time'],
   selectedRepeat: null,
-  lastFocusedElement: null,
 
   init() {
     this.activeListEl = document.getElementById('active-task-list');
@@ -52,36 +51,25 @@ window.TasksComponent = {
   bindDateTrigger() {
     if (!this.btnDate) return;
     this.btnDate.addEventListener('click', () => {
-      window.ScheduleComponent?.open(
-        this.selectedDueDate,
-        this.selectedDueTime,
-        this.selectedReminders,
-        this.selectedRepeat,
-        result => {
-          if (typeof result === 'object' && result !== null) {
-            this.selectedDueDate = result.dueDate;
-            this.selectedDueTime = result.dueTime;
-            this.selectedReminders = result.reminders || ['on_time'];
-            this.selectedRepeat = result.repeat || null;
-          } else {
-            this.selectedDueDate = result;
-          }
-          this.syncDateButton();
-        }
-      );
+      window.ScheduleComponent?.open(this.selectedDueDate, this.selectedDueTime, this.selectedReminders, this.selectedRepeat, result => {
+        if (typeof result === 'object' && result !== null) {
+          this.selectedDueDate = result.dueDate;
+          this.selectedDueTime = result.dueTime;
+          this.selectedReminders = result.reminders || ['on_time'];
+          this.selectedRepeat = result.repeat || null;
+        } else this.selectedDueDate = result;
+        this.syncDateButton();
+      });
     });
   },
 
   bindEvents() {
-    this.openAddTaskBtn?.addEventListener('click', () => this.openModal());
-    this.addTaskModal?.addEventListener('click', e => {
-      if (e.target === this.addTaskModal) this.closeModal();
+    this.openAddTaskBtn?.addEventListener('click', event => this.openModal(null, event.currentTarget));
+    this.addTaskModal?.addEventListener('click', event => { if (event.target === this.addTaskModal) this.closeModal(); });
+    this.form?.addEventListener('submit', event => { event.preventDefault(); this.submitTask(); });
+    this.addTaskModal?.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); this.closeModal(); }
     });
-    this.form?.addEventListener('submit', e => {
-      e.preventDefault();
-      this.submitTask();
-    });
-    this.addTaskModal?.addEventListener('keydown', e => this.handleModalKeydown(e));
     this.btnAddSubtask?.addEventListener('click', () => {
       const parent = this.editingTaskId ? window.AppState.getTask(this.editingTaskId) : null;
       if (!parent || parent.parentTaskId) return;
@@ -92,27 +80,6 @@ window.TasksComponent = {
     this.bindContextMenu(this.btnPriority, this.menuPriority, 'single', 'priority');
     this.bindProjectMenuTrigger();
     this.bindTagMenuTrigger();
-  },
-
-  handleModalKeydown(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      this.closeModal();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const focusable = [...this.addTaskModal.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])')]
-      .filter(el => !el.disabled && el.offsetParent !== null);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
   },
 
   initKeyboardAdjustment() {
@@ -138,9 +105,7 @@ window.TasksComponent = {
       '--quick-vv-width': viewport?.width ?? window.innerWidth,
       '--quick-vv-height': viewport?.height ?? window.innerHeight
     };
-    Object.entries(values).forEach(([property, value]) =>
-      this.addTaskModal.style.setProperty(property, `${Math.max(0, value)}px`)
-    );
+    Object.entries(values).forEach(([property, value]) => this.addTaskModal.style.setProperty(property, `${Math.max(0, value)}px`));
   },
 
   resetQuickInputViewport() {
@@ -151,55 +116,46 @@ window.TasksComponent = {
   },
 
   syncUIFromState() {
-    this.menuPriority?.querySelectorAll('.context-menu-item').forEach(item => {
-      item.classList.toggle('selected', item.dataset.priority === this.selectedPriority);
-    });
+    this.menuPriority?.querySelectorAll('.context-menu-item').forEach(item => item.classList.toggle('selected', item.dataset.priority === this.selectedPriority));
     this.btnPriority?.classList.toggle('active', Boolean(this.selectedPriority));
-
-    this.menuProject?.querySelectorAll('.context-menu-item').forEach(item => {
-      item.classList.toggle('selected', item.dataset.project === this.selectedProject);
-    });
+    this.menuProject?.querySelectorAll('.context-menu-item').forEach(item => item.classList.toggle('selected', item.dataset.project === this.selectedProject));
     this.btnProject?.classList.toggle('active', Boolean(this.selectedProject));
-
-    this.menuTags?.querySelectorAll('.context-menu-item').forEach(item => {
-      item.classList.toggle('selected', this.selectedTags.includes(item.dataset.tag));
-    });
+    this.menuTags?.querySelectorAll('.context-menu-item').forEach(item => item.classList.toggle('selected', this.selectedTags.includes(item.dataset.tag)));
     this.btnTags?.classList.toggle('active', this.selectedTags.length > 0);
     [this.menuPriority, this.menuTags, this.menuProject].forEach(menu => menu && this.syncMenuSelection(menu));
     this.syncDateButton();
   },
 
   syncDateButton() {
-    const hasSchedule = Boolean(
-      this.selectedDueDate ||
-      this.selectedDueTime ||
-      (this.selectedRepeat && this.selectedRepeat.mode !== 'none')
-    );
+    const hasSchedule = Boolean(this.selectedDueDate || this.selectedDueTime || (this.selectedRepeat && this.selectedRepeat.mode !== 'none'));
     this.btnDate?.classList.toggle('active', hasSchedule);
     if (!this.btnDate) return;
     const datePart = this.selectedDueDate || 'No date';
     const timePart = this.selectedDueTime ? `, ${this.selectedDueTime}` : '';
-    const repPart = this.selectedRepeat && this.selectedRepeat.mode !== 'none' ? ' 🔁' : '';
-    this.btnDate.title = hasSchedule ? `Scheduled: ${datePart}${timePart}${repPart}` : 'Set Date';
+    const repeatPart = this.selectedRepeat && this.selectedRepeat.mode !== 'none' ? ' 🔁' : '';
+    this.btnDate.title = hasSchedule ? `Scheduled: ${datePart}${timePart}${repeatPart}` : 'Set Date';
   },
 
-  submitTask() {
+  async submitTask() {
     if (!this.titleInput?.value.trim()) return this.titleInput?.reportValidity();
     const payload = {
-      title: this.titleInput.value.trim(),
-      description: this.descInput?.value.trim() || '',
-      dueDate: this.selectedDueDate,
-      dueTime: this.selectedDueTime,
+      title: this.titleInput.value.trim(), description: this.descInput?.value.trim() || '',
+      dueDate: this.selectedDueDate, dueTime: this.selectedDueTime,
       reminders: [...this.selectedReminders],
       repeat: this.selectedRepeat ? JSON.parse(JSON.stringify(this.selectedRepeat)) : null,
-      project: this.selectedProject,
-      priority: this.selectedPriority,
-      tags: [...this.selectedTags]
+      project: this.selectedProject, priority: this.selectedPriority, tags: [...this.selectedTags]
     };
-    if (this.editingTaskId) window.AppState.updateTask(this.editingTaskId, payload);
-    else window.AppState.addTask({ ...payload, parentTaskId: null });
-    this.closeModal();
-    this.render();
+    this.submitTaskBtn.disabled = true;
+    try {
+      if (this.editingTaskId) await window.AppDataService.updateTask(this.editingTaskId, payload);
+      else await window.AppDataService.createTask({ ...payload, parentTaskId: null });
+      this.closeModal();
+      this.render();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save this task. Your form has been kept open.', error);
+    } finally {
+      this.submitTaskBtn.disabled = false;
+    }
   },
 
   resetSelections(useCurrentContext = false) {
@@ -210,9 +166,7 @@ window.TasksComponent = {
     if (useCurrentContext) {
       if (window.AppState.currentFilterType === 'project') this.selectedProject = window.AppState.currentFilter;
       else if (window.AppState.currentFilterType === 'tag') this.selectedTags = [window.AppState.currentFilter];
-      else if (window.AppState.currentFilterType === 'smart' && window.AppState.currentFilter === 'today') {
-        this.selectedDueDate = window.AppState.getTodayDateStr();
-      }
+      else if (window.AppState.currentFilterType === 'smart' && window.AppState.currentFilter === 'today') this.selectedDueDate = window.AppState.getTodayDateStr();
     }
     this.selectedDueTime = null;
     this.selectedReminders = ['on_time'];
@@ -221,13 +175,11 @@ window.TasksComponent = {
     this.closeAllContextMenus();
   },
 
-  openModal(taskToEdit = null) {
+  openModal(taskToEdit = null, trigger = null) {
     if (taskToEdit && window.AppState.isSubtask(taskToEdit)) {
-      window.SubtaskEditorComponent?.openEdit(taskToEdit.id);
+      window.SubtaskEditorComponent?.openEdit(taskToEdit.id, trigger);
       return;
     }
-    this.lastFocusedElement = document.activeElement;
-
     if (taskToEdit) {
       const normalized = window.AppState.normalizeTask(taskToEdit);
       this.editingTaskId = normalized.id;
@@ -256,19 +208,20 @@ window.TasksComponent = {
       this.submitTaskBtn.title = 'Add Task';
       this.submitTaskBtn.setAttribute('aria-label', 'Add Task');
     }
-
-    this.addTaskModal.classList.add('active');
-    this.addTaskModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.addTaskModal, {
+      trigger,
+      initialFocus: this.titleInput,
+      fallbackFocus: '#btn-open-add-task'
+    });
     this.syncTaskModalBodyState();
     this.syncQuickInputViewport();
-    requestAnimationFrame(() => this.titleInput?.focus());
   },
 
   closeModal() {
+    if (!this.addTaskModal?.classList.contains('active')) return;
     this.closeAllContextMenus();
     this.closeTaskActionMenu(false);
-    this.addTaskModal.classList.remove('active');
-    this.addTaskModal.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.addTaskModal, { fallbackFocus: '#btn-open-add-task' });
     this.resetQuickInputViewport();
     this.editingTaskId = null;
     this.titleInput.value = '';
@@ -278,8 +231,6 @@ window.TasksComponent = {
     this.parentSubtasksList.innerHTML = '';
     this.resetSelections();
     this.syncTaskModalBodyState();
-    if (this.lastFocusedElement?.isConnected) this.lastFocusedElement.focus();
-    this.lastFocusedElement = null;
   },
 
   syncTaskModalBodyState() {

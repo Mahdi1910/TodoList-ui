@@ -1,5 +1,29 @@
 window.TaskDragCommitMethods = {
-  commitTaskDrag() {
+  async commitTaskDrag() {
+    const session = this.dragSession;
+    if (!session) return;
+    const destination = this.getDropLaneContext(session.currentLane);
+    if (this.isHierarchyPreviewUnchanged(session, destination)) {
+      this.cleanupTaskDrag(true);
+      return;
+    }
+    try {
+      await window.AppDataService.commitHierarchyDrag({
+        taskId: session.taskId,
+        targetLevel: session.previewLevel,
+        targetParentId: session.previewParentId,
+        beforeTaskId: session.previewBeforeTaskId,
+        afterTaskId: session.previewAfterTaskId,
+        sourceContext: session.sourceContext,
+        destinationContext: destination
+      });
+      if (window.WorkspaceControls) {
+        window.WorkspaceControls.sortKey = 'custom';
+        window.WorkspaceControls.syncUI();
+      }
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save the new task hierarchy or position.', error);
+    }
     this.cleanupTaskDrag(true);
   },
 
@@ -8,12 +32,7 @@ window.TaskDragCommitMethods = {
   },
 
   hasDragMetadataChange(source, destination) {
-    return Boolean(
-      source && destination &&
-      source.groupType !== 'none' &&
-      source.groupType === destination.groupType &&
-      source.groupKey !== destination.groupKey
-    );
+    return Boolean(source && destination && source.groupType !== 'none' && source.groupType === destination.groupType && source.groupKey !== destination.groupKey);
   },
 
   isHierarchyPreviewUnchanged(session, destination) {
@@ -23,14 +42,12 @@ window.TaskDragCommitMethods = {
       (initial.parentId || null) === (session.previewParentId || null) &&
       (initial.beforeTaskId || null) === (session.previewBeforeTaskId || null) &&
       (initial.afterTaskId || null) === (session.previewAfterTaskId || null);
-    const sameGroup = session.sourceContext?.groupType === destination?.groupType &&
-      session.sourceContext?.groupKey === destination?.groupKey;
+    const sameGroup = session.sourceContext?.groupType === destination?.groupType && session.sourceContext?.groupKey === destination?.groupKey;
     return sameHierarchy && sameGroup;
   },
 
   cancelTaskDrag() {
-    if (!this.dragSession) return;
-    this.cleanupTaskDrag(true);
+    if (this.dragSession) this.cleanupTaskDrag(true);
   },
 
   cleanupTaskDrag(render = false) {
@@ -43,9 +60,7 @@ window.TaskDragCommitMethods = {
     this.cancelPendingTouchDrag?.();
     session.dragUnit?.remove();
     session.placeholder?.remove();
-    document.querySelectorAll('.subtask-list[data-drag-reveal="true"]').forEach(host => {
-      delete host.dataset.dragReveal;
-    });
+    document.querySelectorAll('.subtask-list[data-drag-reveal="true"]').forEach(host => { delete host.dataset.dragReveal; });
     document.body.classList.remove('task-drag-active');
     document.querySelectorAll('.task-drop-lane.is-drop-target').forEach(lane => lane.classList.remove('is-drop-target'));
     this.dragSession = null;
@@ -54,14 +69,9 @@ window.TaskDragCommitMethods = {
   },
 
   getTaskDragEdgeSpeed(position, start, end) {
-    const zone = 55;
-    const maxSpeed = 18;
-    if (position < start + zone) {
-      return -maxSpeed * Math.max(0, Math.min(1, (start + zone - position) / zone));
-    }
-    if (position > end - zone) {
-      return maxSpeed * Math.max(0, Math.min(1, (position - (end - zone)) / zone));
-    }
+    const zone = 55, maxSpeed = 18;
+    if (position < start + zone) return -maxSpeed * Math.max(0, Math.min(1, (start + zone - position) / zone));
+    if (position > end - zone) return maxSpeed * Math.max(0, Math.min(1, (position - (end - zone)) / zone));
     return 0;
   },
 
@@ -76,7 +86,7 @@ window.TaskDragCommitMethods = {
       if (verticalSpeed) {
         const before = this.dragWorkspace.scrollTop;
         this.dragWorkspace.scrollTop += verticalSpeed;
-        scrolled = scrolled || before !== this.dragWorkspace.scrollTop;
+        scrolled ||= before !== this.dragWorkspace.scrollTop;
       }
       const kanban = document.getElementById('kanban-view');
       if (kanban && kanban.offsetParent !== null) {
@@ -85,7 +95,7 @@ window.TaskDragCommitMethods = {
         if (horizontalSpeed) {
           const before = kanban.scrollLeft;
           kanban.scrollLeft += horizontalSpeed;
-          scrolled = scrolled || before !== kanban.scrollLeft;
+          scrolled ||= before !== kanban.scrollLeft;
         }
       }
       if (scrolled) this.updateTaskDropTarget(session.x, session.y);

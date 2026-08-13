@@ -6,33 +6,27 @@ window.WorkspaceControls = {
   settingsPanelOpen: false,
 
   init() {
+    const settings = window.AppState.settings || {};
+    this.sortKey = this.normalizeSortKey(settings.sortKey || 'custom');
+    this.sortDirection = settings.sortDirection === 'desc' ? 'desc' : 'asc';
+    this.groupKey = ['none', 'priority', 'date', 'project', 'tag'].includes(settings.groupKey) ? settings.groupKey : 'none';
     this.directionBtn = document.getElementById('btn-sort-direction');
     this.menuBtn = document.getElementById('btn-workspace-menu');
     this.menu = document.getElementById('workspace-menu');
     if (!this.directionBtn || !this.menuBtn || !this.menu) return;
-
     this.buildLayeredMenu();
     this.directionBtn.addEventListener('click', () => this.toggleDirection());
-    this.menuBtn.addEventListener('click', e => {
-      e.stopPropagation();
+    this.menuBtn.addEventListener('click', event => {
+      event.stopPropagation();
       this.menu.classList.contains('open') ? this.closeMenu() : this.openMenu();
     });
-    this.menu.addEventListener('click', e => {
-      e.stopPropagation();
-      this.handleMainMenuClick(e);
-    });
-    this.settingsPanel.addEventListener('click', e => {
-      e.stopPropagation();
-      this.handleSettingsPanelClick(e);
-    });
+    this.menu.addEventListener('click', event => { event.stopPropagation(); this.handleMainMenuClick(event); });
+    this.settingsPanel.addEventListener('click', event => { event.stopPropagation(); this.handleSettingsPanelClick(event); });
     document.addEventListener('click', () => {
-      if (this.settingsPanelOpen) {
-        this.closeSettingsPanel();
-        return;
-      }
+      if (this.settingsPanelOpen) { this.closeSettingsPanel(); return; }
       this.closeMenu();
     });
-    document.addEventListener('keydown', e => this.handleMenuKeydown(e));
+    document.addEventListener('keydown', event => this.handleMenuKeydown(event));
     window.addEventListener('resize', () => this.repositionSettingsPanel());
     window.visualViewport?.addEventListener('resize', () => this.repositionSettingsPanel());
     this.syncUI();
@@ -42,22 +36,12 @@ window.WorkspaceControls = {
     this.menu.innerHTML = `
       <div class="workspace-menu-label">View</div>
       <div class="workspace-view-switcher" role="group" aria-label="Task view">
-        <button type="button" data-view-type="list" role="radio" aria-checked="true" aria-label="List view" title="List view">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-        <button type="button" data-view-type="kanban" role="radio" aria-checked="false" aria-label="Kanban view" title="Kanban view">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="5" width="5" height="14" rx="1"/><rect x="11" y="5" width="4" height="9" rx="1"/><rect x="17" y="5" width="3" height="11" rx="1"/></svg>
-        </button>
-        <button type="button" data-view-type="timeline" disabled aria-disabled="true" aria-label="Timeline view unavailable" title="Timeline view — unavailable">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h12" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
-        </button>
+        <button type="button" data-view-type="list" role="radio" aria-checked="true" aria-label="List view" title="List view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button type="button" data-view-type="kanban" role="radio" aria-checked="false" aria-label="Kanban view" title="Kanban view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="5" width="5" height="14" rx="1"/><rect x="11" y="5" width="4" height="9" rx="1"/><rect x="17" y="5" width="3" height="11" rx="1"/></svg></button>
+        <button type="button" data-view-type="timeline" disabled aria-disabled="true" aria-label="Timeline view unavailable" title="Timeline view — unavailable"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h12" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></button>
       </div>
       <div class="workspace-menu-divider"></div>
-      <button type="button" class="workspace-submenu-trigger" id="workspace-sort-group-trigger" aria-haspopup="dialog" aria-controls="workspace-sort-group-panel" aria-expanded="false">
-        <span class="workspace-menu-primary">Sort &amp; Group</span>
-        <span class="workspace-menu-chevron" aria-hidden="true">›</span>
-      </button>`;
-
+      <button type="button" class="workspace-submenu-trigger" id="workspace-sort-group-trigger" aria-haspopup="dialog" aria-controls="workspace-sort-group-panel" aria-expanded="false"><span class="workspace-menu-primary">Sort &amp; Group</span><span class="workspace-menu-chevron" aria-hidden="true">›</span></button>`;
     this.settingsTrigger = this.menu.querySelector('#workspace-sort-group-trigger');
     this.settingsPanel = this.createSortGroupPanel();
   },
@@ -71,27 +55,9 @@ window.WorkspaceControls = {
     panel.setAttribute('aria-label', 'Sort and group settings');
     panel.setAttribute('aria-hidden', 'true');
     panel.innerHTML = `
-      <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
-        <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
-        <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
-          ${this.optionChip('sort', 'custom', 'Custom')}
-          ${this.optionChip('sort', 'dueDate', 'Due Date')}
-          ${this.optionChip('sort', 'priority', 'Priority')}
-          ${this.optionChip('sort', 'name', 'Name')}
-          ${this.optionChip('sort', 'createdAt', 'Created Date')}
-        </div>
-      </section>
+      <section class="workspace-settings-section" aria-labelledby="workspace-sort-label"><div class="workspace-settings-label" id="workspace-sort-label">Sort</div><div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">${this.optionChip('sort', 'custom', 'Custom')}${this.optionChip('sort', 'dueDate', 'Due Date')}${this.optionChip('sort', 'priority', 'Priority')}${this.optionChip('sort', 'name', 'Name')}${this.optionChip('sort', 'createdAt', 'Created Date')}</div></section>
       <div class="workspace-settings-divider"></div>
-      <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
-        <div class="workspace-settings-label" id="workspace-group-label">Group</div>
-        <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
-          ${this.optionChip('group', 'none', 'None')}
-          ${this.optionChip('group', 'priority', 'Priority')}
-          ${this.optionChip('group', 'date', 'Date')}
-          ${this.optionChip('group', 'project', 'Project')}
-          ${this.optionChip('group', 'tag', 'Tag')}
-        </div>
-      </section>`;
+      <section class="workspace-settings-section" aria-labelledby="workspace-group-label"><div class="workspace-settings-label" id="workspace-group-label">Group</div><div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">${this.optionChip('group', 'none', 'None')}${this.optionChip('group', 'priority', 'Priority')}${this.optionChip('group', 'date', 'Date')}${this.optionChip('group', 'project', 'Project')}${this.optionChip('group', 'tag', 'Tag')}</div></section>`;
     document.body.appendChild(panel);
     return panel;
   },
@@ -115,10 +81,7 @@ window.WorkspaceControls = {
     this.menuBtn?.setAttribute('aria-expanded', 'false');
   },
 
-  toggleSettingsPanel() {
-    this.settingsPanelOpen ? this.closeSettingsPanel() : this.openSettingsPanel();
-  },
-
+  toggleSettingsPanel() { this.settingsPanelOpen ? this.closeSettingsPanel() : this.openSettingsPanel(); },
   openSettingsPanel() {
     if (!this.menu.classList.contains('open')) return;
     this.settingsPanelOpen = true;
@@ -129,7 +92,6 @@ window.WorkspaceControls = {
     this.syncUI();
     this.positionSettingsPanel();
   },
-
   closeSettingsPanel() {
     this.settingsPanelOpen = false;
     this.settingsPanel?.classList.remove('open');
@@ -152,90 +114,85 @@ window.WorkspaceControls = {
     this.settingsPanel.style.top = `${Math.max(margin, top)}px`;
     this.settingsPanel.style.visibility = '';
   },
+  repositionSettingsPanel() { if (this.settingsPanelOpen) this.positionSettingsPanel(); },
 
-  repositionSettingsPanel() {
-    if (this.settingsPanelOpen) this.positionSettingsPanel();
-  },
-
-  handleMainMenuClick(e) {
-    if (e.target.closest('#workspace-sort-group-trigger')) {
-      this.toggleSettingsPanel();
-      return;
-    }
-    const viewItem = e.target.closest('[data-view-type]');
+  async handleMainMenuClick(event) {
+    if (event.target.closest('#workspace-sort-group-trigger')) return this.toggleSettingsPanel();
+    const viewItem = event.target.closest('[data-view-type]');
     if (viewItem && !viewItem.disabled) {
       this.closeSettingsPanel();
-      this.setViewType(viewItem.dataset.viewType, { persist: true, render: false });
+      await this.setViewType(viewItem.dataset.viewType, { persist: true, render: true });
+    }
+  },
+
+  async handleSettingsPanelClick(event) {
+    const sortItem = event.target.closest('[data-sort-key]');
+    const groupItem = event.target.closest('[data-group-key]');
+    if (!sortItem && !groupItem) return;
+    try {
+      if (sortItem) {
+        const value = this.normalizeSortKey(sortItem.dataset.sortKey);
+        await window.AppDataService.setSetting('sortKey', value);
+        this.sortKey = value;
+      }
+      if (groupItem) {
+        const value = groupItem.dataset.groupKey;
+        await window.AppDataService.setSetting('groupKey', value);
+        this.groupKey = value;
+      }
       this.syncUI();
       window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save the Sort & Group setting.', error);
     }
   },
 
-  handleSettingsPanelClick(e) {
-    const sortItem = e.target.closest('[data-sort-key]');
-    const groupItem = e.target.closest('[data-group-key]');
-    if (!sortItem && !groupItem) return;
-    if (sortItem) this.sortKey = this.normalizeSortKey(sortItem.dataset.sortKey);
-    if (groupItem) this.groupKey = groupItem.dataset.groupKey;
-    this.syncUI();
-    window.TasksComponent?.render();
-  },
-
-  handleMenuKeydown(e) {
-    if (e.key !== 'Escape' || !this.menu.classList.contains('open')) return;
-    e.preventDefault();
-    if (this.settingsPanelOpen) {
-      this.closeSettingsPanel();
-      this.settingsTrigger?.focus();
-      return;
-    }
+  handleMenuKeydown(event) {
+    if (event.key !== 'Escape' || !this.menu.classList.contains('open')) return;
+    event.preventDefault();
+    if (this.settingsPanelOpen) { this.closeSettingsPanel(); this.settingsTrigger?.focus(); return; }
     this.closeMenu();
     this.menuBtn.focus();
   },
 
-  normalizeSortKey(sortKey) {
-    return sortKey === 'default' ? 'custom' : sortKey;
-  },
+  normalizeSortKey(sortKey) { return sortKey === 'default' ? 'custom' : sortKey; },
+  normalizeViewType(viewType) { return viewType === 'kanban' ? 'kanban' : 'list'; },
 
-  normalizeViewType(viewType) {
-    return viewType === 'kanban' ? 'kanban' : 'list';
-  },
-
-  setViewType(viewType, { persist = true, render = true } = {}) {
-    this.viewType = this.normalizeViewType(viewType);
-    if (persist) this.persistViewToCurrentEntity();
-    this.syncUI();
-    if (render) window.TasksComponent?.render();
-    return this.viewType;
+  async setViewType(viewType, { persist = true, render = true } = {}) {
+    const next = this.normalizeViewType(viewType);
+    try {
+      if (persist && window.AppState.currentFilterType === 'project') await window.AppDataService.setEntityViewType('project', window.AppState.currentFilter, next);
+      else if (persist && window.AppState.currentFilterType === 'tag') await window.AppDataService.setEntityViewType('tag', window.AppState.currentFilter, next);
+      this.viewType = next;
+      this.syncUI();
+      if (render) window.TasksComponent?.render();
+      return next;
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save the selected view.', error);
+      return this.viewType;
+    }
   },
 
   syncViewFromCurrentFilter() {
     let viewType = this.viewType;
-    if (window.AppState.currentFilterType === 'project') {
-      viewType = window.AppState.getProject(window.AppState.currentFilter)?.viewType || 'list';
-    } else if (window.AppState.currentFilterType === 'tag') {
-      viewType = window.AppState.getTag(window.AppState.currentFilter)?.viewType || 'list';
-    }
+    if (window.AppState.currentFilterType === 'project') viewType = window.AppState.getProject(window.AppState.currentFilter)?.viewType || 'list';
+    else if (window.AppState.currentFilterType === 'tag') viewType = window.AppState.getTag(window.AppState.currentFilter)?.viewType || 'list';
     this.viewType = this.normalizeViewType(viewType);
     this.syncUI();
     return this.viewType;
   },
 
-  persistViewToCurrentEntity() {
-    if (window.AppState.currentFilterType === 'project') {
-      const project = window.AppState.getProject(window.AppState.currentFilter);
-      if (project) project.viewType = this.viewType;
-    } else if (window.AppState.currentFilterType === 'tag') {
-      const tag = window.AppState.getTag(window.AppState.currentFilter);
-      if (tag) tag.viewType = this.viewType;
-    }
-  },
-
-  toggleDirection() {
+  async toggleDirection() {
     if (this.normalizeSortKey(this.sortKey) === 'custom') return;
-    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    this.syncUI();
-    window.TasksComponent?.render();
+    const next = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    try {
+      await window.AppDataService.setSetting('sortDirection', next);
+      this.sortDirection = next;
+      this.syncUI();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence?.reportError('Could not save sort direction.', error);
+    }
   },
 
   syncUI() {
@@ -255,15 +212,12 @@ window.WorkspaceControls = {
       item.classList.toggle('selected', selected);
       if (!item.disabled) item.setAttribute('aria-checked', selected ? 'true' : 'false');
     });
-
     if (this.directionBtn) {
       const custom = this.sortKey === 'custom';
       const ascending = this.sortDirection === 'asc';
       this.directionBtn.disabled = custom;
       this.directionBtn.textContent = custom ? '↕' : (ascending ? '↑' : '↓');
-      this.directionBtn.title = custom
-        ? 'Custom order — long-press a task to reorder'
-        : (ascending ? 'Ascending — click for Descending' : 'Descending — click for Ascending');
+      this.directionBtn.title = custom ? 'Custom order — long-press a task to reorder' : (ascending ? 'Ascending — click for Descending' : 'Descending — click for Ascending');
       this.directionBtn.setAttribute('aria-label', this.directionBtn.title);
     }
   },
@@ -273,24 +227,18 @@ window.WorkspaceControls = {
     const sortKey = this.normalizeSortKey(this.sortKey);
     const direction = this.sortDirection === 'desc' ? -1 : 1;
     if (sortKey === 'custom') return sorted;
-
     const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
     const priorityRank = { high: 0, medium: 1, low: 2, '': 3 };
     sorted.sort((a, b) => {
       let result = 0;
       if (sortKey === 'dueDate') {
-        const aScheduled = Boolean(a.dueDate);
-        const bScheduled = Boolean(b.dueDate);
+        const aScheduled = Boolean(a.dueDate), bScheduled = Boolean(b.dueDate);
         if (aScheduled !== bScheduled) return aScheduled ? -1 : 1;
         if (!aScheduled) return 0;
         result = compareText(`${a.dueDate}|${a.dueTime || ''}`, `${b.dueDate}|${b.dueTime || ''}`);
-      } else if (sortKey === 'priority') {
-        result = (priorityRank[a.priority] ?? 1) - (priorityRank[b.priority] ?? 1);
-      } else if (sortKey === 'name') {
-        result = compareText(a.title, b.title);
-      } else if (sortKey === 'createdAt') {
-        result = compareText(a.createdAt, b.createdAt);
-      }
+      } else if (sortKey === 'priority') result = (priorityRank[a.priority] ?? 1) - (priorityRank[b.priority] ?? 1);
+      else if (sortKey === 'name') result = compareText(a.title, b.title);
+      else if (sortKey === 'createdAt') result = compareText(a.createdAt, b.createdAt);
       return result * direction;
     });
     return sorted;
