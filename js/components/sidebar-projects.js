@@ -76,10 +76,12 @@ window.SidebarProjectMethods = {
         });
       };
     });
-    this.projectModal.classList.add('active');
-    this.projectModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.projectModal, {
+      trigger: document.activeElement,
+      initialFocus: this.projectNameInput,
+      fallbackFocus: document.getElementById('btn-add-project') || this.toggleBtn
+    });
     document.body.classList.add('modal-open');
-    requestAnimationFrame(() => this.projectNameInput?.focus());
   },
 
   selectProjectIcon(icon) {
@@ -134,8 +136,9 @@ window.SidebarProjectMethods = {
   },
 
   closeProjectModal() {
-    this.projectModal?.classList.remove('active');
-    this.projectModal?.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.projectModal, {
+      fallbackFocus: document.getElementById('btn-add-project') || this.toggleBtn
+    });
     document.body.classList.remove('modal-open');
     this.projectIconPicker?.classList.remove('open');
     this.editingProjectId = null;
