@@ -8,6 +8,7 @@ window.SubtaskEditorComponent = {
   selectedReminders: ['on_time'],
   selectedRepeat: null,
   lastFocusedElement: null,
+  typingFocusTarget: null,
 
   init() {
     this.modal = document.getElementById('subtask-modal');
@@ -26,8 +27,56 @@ window.SubtaskEditorComponent = {
     this.btnClose = document.getElementById('btn-close-subtask');
     this.btnCancel = document.getElementById('btn-cancel-subtask');
     this.btnSubmit = document.getElementById('btn-submit-subtask');
+    this.bindEditorFocusContinuity();
     this.bindEvents();
     this.initKeyboardAdjustment();
+  },
+
+  isEditorTypingInput(element) {
+    return Boolean(
+      element &&
+      element.isConnected &&
+      (element === this.titleInput || element === this.descInput) &&
+      this.modal?.classList.contains('active')
+    );
+  },
+
+  getActiveEditorInput() {
+    return this.isEditorTypingInput(document.activeElement) ? document.activeElement : null;
+  },
+
+  rememberTypingFocus(element = this.getActiveEditorInput()) {
+    if (this.isEditorTypingInput(element)) this.typingFocusTarget = element;
+    return this.typingFocusTarget;
+  },
+
+  bindAuxiliaryFocusGuard(control) {
+    if (!control) return;
+    control.addEventListener('pointerdown', () => this.rememberTypingFocus());
+    control.addEventListener('mousedown', event => {
+      const activeInput = this.getActiveEditorInput();
+      if (!activeInput) return;
+      this.typingFocusTarget = activeInput;
+      event.preventDefault();
+    });
+  },
+
+  bindEditorFocusContinuity() {
+    [this.titleInput, this.descInput].forEach(input => {
+      input?.addEventListener('focus', () => { this.typingFocusTarget = input; });
+    });
+    [this.btnDate, this.btnPriority, this.btnTags]
+      .forEach(control => this.bindAuxiliaryFocusGuard(control));
+  },
+
+  getMenuInteractionFromClick(event) {
+    return event?.detail === 0 ? 'keyboard' : 'pointer';
+  },
+
+  handleMenuPointerDown(event, menu) {
+    if (!event.target.closest('.context-menu-item')) return;
+    const preserved = this.getMenuPortalMap().get(menu)?.preserveEditorFocus || null;
+    if (preserved && document.activeElement === preserved) event.preventDefault();
   },
 
   bindEvents() {
@@ -44,12 +93,22 @@ window.SubtaskEditorComponent = {
     this.btnDate?.addEventListener('click', () => this.openSchedule());
     this.btnPriority?.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleMenu(this.menuPriority, this.btnPriority);
+      const interaction = this.getMenuInteractionFromClick(e);
+      this.toggleMenu(this.menuPriority, this.btnPriority, {
+        interaction,
+        preserveEditorFocus: interaction === 'pointer' ? this.getActiveEditorInput() : null
+      });
     });
     this.btnTags?.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleMenu(this.menuTags, this.btnTags);
+      const interaction = this.getMenuInteractionFromClick(e);
+      this.toggleMenu(this.menuTags, this.btnTags, {
+        interaction,
+        preserveEditorFocus: interaction === 'pointer' ? this.getActiveEditorInput() : null
+      });
     });
+    this.menuPriority?.addEventListener('mousedown', e => this.handleMenuPointerDown(e, this.menuPriority));
+    this.menuTags?.addEventListener('mousedown', e => this.handleMenuPointerDown(e, this.menuTags));
     this.menuPriority?.addEventListener('click', e => {
       const item = e.target.closest('[data-subtask-priority]');
       if (!item) return;
@@ -134,6 +193,7 @@ window.SubtaskEditorComponent = {
     this.editingSubtaskId = null;
     this.parentTaskId = null;
     this.lastFocusedElement = null;
+    this.typingFocusTarget = null;
     window.TasksComponent?.syncTaskModalBodyState();
   },
 
@@ -173,6 +233,7 @@ window.SubtaskEditorComponent = {
   },
 
   openSchedule() {
+    const preserveEditorFocus = this.getActiveEditorInput();
     this.closeMenus();
     window.ScheduleComponent?.open(
       this.selectedDueDate,
@@ -185,7 +246,8 @@ window.SubtaskEditorComponent = {
         this.selectedReminders = Array.isArray(result?.reminders) ? [...result.reminders] : ['on_time'];
         this.selectedRepeat = result?.repeat ? JSON.parse(JSON.stringify(result.repeat)) : null;
         this.syncScheduleUI();
-      }
+      },
+      { preserveEditorFocus }
     );
   },
 
@@ -243,16 +305,19 @@ window.SubtaskEditorComponent = {
     return this.getMenuPortalMap().get(menu)?.trigger || fallback || menu?.previousElementSibling || null;
   },
 
-  mountMenu(menu, trigger) {
+  mountMenu(menu, trigger, preserveEditorFocus = null) {
     const portals = this.getMenuPortalMap();
-    if (portals.has(menu)) return;
+    if (portals.has(menu)) {
+      portals.get(menu).preserveEditorFocus = preserveEditorFocus;
+      return;
+    }
     const placeholder = document.createComment(`subtask-context-menu:${menu.id || 'menu'}`);
     const parent = menu.parentNode;
     parent?.insertBefore(placeholder, menu);
     if (!this.modal) return;
     this.modal.appendChild(menu);
     menu.classList.add('context-menu-portal');
-    portals.set(menu, { placeholder, parent, trigger, host: this.modal });
+    portals.set(menu, { placeholder, parent, trigger, host: this.modal, preserveEditorFocus });
   },
 
   restoreMenu(menu) {
@@ -310,14 +375,14 @@ window.SubtaskEditorComponent = {
     });
   },
 
-  toggleMenu(menu, trigger = null) {
+  toggleMenu(menu, trigger = null, { preserveEditorFocus = null } = {}) {
     if (!menu) return;
     const open = menu.classList.contains('open');
     this.closeMenus();
     window.TasksComponent?.closeTaskActionMenu(false);
     if (!open) {
       const resolvedTrigger = trigger || menu.previousElementSibling;
-      this.mountMenu(menu, resolvedTrigger);
+      this.mountMenu(menu, resolvedTrigger, preserveEditorFocus);
       menu.classList.add('open');
       this.positionMenu(menu, resolvedTrigger);
       requestAnimationFrame(() => this.positionMenu(menu, resolvedTrigger));
