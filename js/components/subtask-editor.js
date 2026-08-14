@@ -116,24 +116,25 @@ window.SubtaskEditorComponent = {
     this.syncTagUI();
     this.syncScheduleUI();
     this.closeMenus();
-    this.modal.classList.add('active');
-    this.modal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.modal, {
+      trigger: this.lastFocusedElement,
+      initialFocus: this.titleInput,
+      fallbackFocus: window.TasksComponent?.openAddTaskBtn
+    });
     window.TasksComponent?.syncTaskModalBodyState();
-    requestAnimationFrame(() => this.titleInput?.focus());
   },
 
   close() {
     if (!this.modal?.classList.contains('active')) return;
     this.closeMenus();
-    this.modal.classList.remove('active');
-    this.modal.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.modal, {
+      fallbackFocus: window.TasksComponent?.openAddTaskBtn
+    });
     if (this.card) this.card.style.marginBottom = '0px';
-    const focusTarget = this.lastFocusedElement;
     this.editingSubtaskId = null;
     this.parentTaskId = null;
     this.lastFocusedElement = null;
     window.TasksComponent?.syncTaskModalBodyState();
-    if (focusTarget?.isConnected) focusTarget.focus();
   },
 
   resetDraft() {
