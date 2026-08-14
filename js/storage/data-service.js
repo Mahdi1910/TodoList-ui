@@ -400,10 +400,6 @@
           });
           replaceTaskMemory(changed);
         }
-
-        window.AppState.tasks.forEach(task => {
-          if (task.repeatState) delete task.repeatState._needsRepair;
-        });
         return changed.length;
       });
     },
