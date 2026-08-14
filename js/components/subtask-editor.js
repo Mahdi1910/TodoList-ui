@@ -44,11 +44,11 @@ window.SubtaskEditorComponent = {
     this.btnDate?.addEventListener('click', () => this.openSchedule());
     this.btnPriority?.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleMenu(this.menuPriority);
+      this.toggleMenu(this.menuPriority, this.btnPriority);
     });
     this.btnTags?.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleMenu(this.menuTags);
+      this.toggleMenu(this.menuTags, this.btnTags);
     });
     this.menuPriority?.addEventListener('click', e => {
       const item = e.target.closest('[data-subtask-priority]');
@@ -234,17 +234,102 @@ window.SubtaskEditorComponent = {
     this.btnTags?.classList.toggle('active', this.selectedTags.length > 0);
   },
 
-  toggleMenu(menu) {
+  getMenuPortalMap() {
+    if (!this._menuPortals) this._menuPortals = new Map();
+    return this._menuPortals;
+  },
+
+  getMenuTrigger(menu, fallback = null) {
+    return this.getMenuPortalMap().get(menu)?.trigger || fallback || menu?.previousElementSibling || null;
+  },
+
+  mountMenu(menu, trigger) {
+    const portals = this.getMenuPortalMap();
+    if (portals.has(menu)) return;
+    const placeholder = document.createComment(`subtask-context-menu:${menu.id || 'menu'}`);
+    const parent = menu.parentNode;
+    parent?.insertBefore(placeholder, menu);
+    if (!this.modal) return;
+    this.modal.appendChild(menu);
+    menu.classList.add('context-menu-portal');
+    portals.set(menu, { placeholder, parent, trigger, host: this.modal });
+  },
+
+  restoreMenu(menu) {
+    const portals = this.getMenuPortalMap();
+    const portal = portals.get(menu);
+    if (!portal) return;
+    menu.classList.remove('context-menu-portal');
+    menu.style.removeProperty('top');
+    menu.style.removeProperty('left');
+    menu.style.removeProperty('right');
+    menu.style.removeProperty('bottom');
+    menu.style.removeProperty('max-height');
+    if (portal.placeholder?.parentNode) portal.placeholder.replaceWith(menu);
+    else portal.parent?.appendChild(menu);
+    portals.delete(menu);
+  },
+
+  positionMenu(menu, trigger = this.getMenuTrigger(menu)) {
+    if (!menu?.classList.contains('open') || !trigger || !this.modal) return;
+    const hostRect = this.modal.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const gap = 8;
+    const edge = 8;
+    const spaceAbove = Math.max(0, triggerRect.top - hostRect.top - gap - edge);
+    const spaceBelow = Math.max(0, hostRect.bottom - triggerRect.bottom - gap - edge);
+
+    menu.style.top = '0px';
+    menu.style.left = '0px';
+    menu.style.bottom = 'auto';
+    menu.style.right = 'auto';
+    menu.style.maxHeight = `${Math.max(80, Math.floor(Math.max(spaceAbove, spaceBelow)))}px`;
+
+    const preferredHeight = Math.min(menu.scrollHeight, 320);
+    const openAbove = spaceAbove >= Math.min(preferredHeight, 140) || spaceAbove >= spaceBelow;
+    const available = Math.max(80, Math.floor(openAbove ? spaceAbove : spaceBelow));
+    menu.style.maxHeight = `${available}px`;
+
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(edge, triggerRect.left - hostRect.left),
+      Math.max(edge, hostRect.width - rect.width - edge)
+    );
+    let top = openAbove
+      ? triggerRect.top - hostRect.top - gap - rect.height
+      : triggerRect.bottom - hostRect.top + gap;
+    top = Math.min(Math.max(edge, top), Math.max(edge, hostRect.height - rect.height - edge));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  },
+
+  positionOpenMenus() {
+    [this.menuPriority, this.menuTags].forEach(menu => {
+      if (menu?.classList.contains('open')) this.positionMenu(menu);
+    });
+  },
+
+  toggleMenu(menu, trigger = null) {
     if (!menu) return;
     const open = menu.classList.contains('open');
     this.closeMenus();
     window.TasksComponent?.closeTaskActionMenu(false);
-    if (!open) menu.classList.add('open');
+    if (!open) {
+      const resolvedTrigger = trigger || menu.previousElementSibling;
+      this.mountMenu(menu, resolvedTrigger);
+      menu.classList.add('open');
+      this.positionMenu(menu, resolvedTrigger);
+      requestAnimationFrame(() => this.positionMenu(menu, resolvedTrigger));
+    }
   },
 
   closeMenus() {
-    this.menuPriority?.classList.remove('open');
-    this.menuTags?.classList.remove('open');
+    [this.menuPriority, this.menuTags].forEach(menu => {
+      if (!menu) return;
+      menu.classList.remove('open');
+      this.restoreMenu(menu);
+    });
   },
 
   handleKeydown(e) {
@@ -279,6 +364,7 @@ window.SubtaskEditorComponent = {
       const viewport = window.visualViewport;
       const height = window.innerHeight - viewport.height - viewport.offsetTop;
       this.card.style.marginBottom = height > 50 ? `${height}px` : '0px';
+      this.positionOpenMenus();
     };
     window.visualViewport.addEventListener('resize', adjust);
     window.visualViewport.addEventListener('scroll', adjust);
