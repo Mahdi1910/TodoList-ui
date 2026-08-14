@@ -40,6 +40,11 @@ Object.assign(window.AppDataService, {
         moved.updatedAt = window.TodoStorageMappers.nowIso();
       }
 
+      const updatedChildren = projectChanged
+        ? window.AppState.getSubtasks(taskId).map(child => ({
+          ...child, project: moved.project, updatedAt: moved.updatedAt
+        }))
+        : [];
       const S = window.TodoDbSchema.STORES;
       const stores = [S.TASKS, S.APP_SETTINGS];
       if (metadataChanged && destination.groupType === 'tag') stores.push(S.TASK_TAGS);
@@ -48,12 +53,8 @@ Object.assign(window.AppDataService, {
         for (const root of rootCopies.values()) {
           await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(root));
         }
-        if (projectChanged) {
-          for (const child of window.AppState.getSubtasks(taskId)) {
-            await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow({
-              ...child, project: moved.project, updatedAt: moved.updatedAt
-            }));
-          }
+        for (const child of updatedChildren) {
+          await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(child));
         }
         if (metadataChanged && destination.groupType === 'tag') {
           await window.TodoRepositories.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', taskId,
@@ -62,17 +63,8 @@ Object.assign(window.AppDataService, {
         await window.TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
       });
 
-      window.AppState.rebaseVisibleRootOrder(visibleIds);
-      window.AppState.getRootTasks().forEach(root => { root.sortOrder = orderById.get(root.id) ?? root.sortOrder; });
-      if (metadataChanged) {
-        const update = {};
-        if (destination.groupType === 'priority') update.priority = moved.priority;
-        if (destination.groupType === 'date') update.dueDate = moved.dueDate;
-        if (destination.groupType === 'project') update.project = moved.project;
-        if (destination.groupType === 'tag') update.tags = nextTags;
-        window.AppState.updateTask(taskId, update);
-      }
-      window.AppState.settings.sortKey = 'custom';
+      window.AppStateSync.replaceTasks([...rootCopies.values(), ...updatedChildren]);
+      window.AppStateSync.setSetting('sortKey', 'custom');
       return true;
     });
   }
