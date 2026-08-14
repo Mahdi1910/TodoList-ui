@@ -73,10 +73,12 @@ window.SidebarTagMethods = {
         });
       };
     });
-    this.tagModal.classList.add('active');
-    this.tagModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.tagModal, {
+      trigger: document.activeElement,
+      initialFocus: this.tagNameInput,
+      fallbackFocus: document.getElementById('btn-add-tag') || this.toggleBtn
+    });
     document.body.classList.add('modal-open');
-    requestAnimationFrame(() => this.tagNameInput?.focus());
   },
 
   selectTagIcon(icon) {
@@ -131,8 +133,9 @@ window.SidebarTagMethods = {
   },
 
   closeTagModal() {
-    this.tagModal?.classList.remove('active');
-    this.tagModal?.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.tagModal, {
+      fallbackFocus: document.getElementById('btn-add-tag') || this.toggleBtn
+    });
     document.body.classList.remove('modal-open');
     this.tagIconPicker?.classList.remove('open');
     this.editingTagId = null;
