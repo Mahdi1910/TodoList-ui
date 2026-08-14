@@ -129,14 +129,12 @@ window.ScheduleComponent = {
     this.renderCalendar();
     this.updateReminderUI();
 
-    this.modalEl.classList.add('active');
-    this.modalEl.setAttribute('aria-hidden', 'false');
-
-    requestAnimationFrame(() => {
-      const selectedOrToday = this.gridEl?.querySelector('.calendar-day.selected') ||
-                              this.gridEl?.querySelector('.calendar-day.today') ||
-                              this.btnQuickToday;
-      selectedOrToday?.focus();
+    window.ModalFocusManager.open(this.modalEl, {
+      trigger: this.lastFocusedElement,
+      initialFocus: () => this.gridEl?.querySelector('.calendar-day.selected') ||
+                          this.gridEl?.querySelector('.calendar-day.today') ||
+                          this.btnQuickToday,
+      fallbackFocus: this.lastFocusedElement
     });
   },
 
@@ -148,12 +146,9 @@ window.ScheduleComponent = {
       this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
     }
     this.closeReminderMenu();
-    this.modalEl?.classList.remove('active');
-    this.modalEl?.setAttribute('aria-hidden', 'true');
-
-    if (this.lastFocusedElement?.isConnected) {
-      this.lastFocusedElement.focus();
-    }
+    window.ModalFocusManager.close(this.modalEl, {
+      fallbackFocus: this.lastFocusedElement
+    });
     this.lastFocusedElement = null;
   },
 
