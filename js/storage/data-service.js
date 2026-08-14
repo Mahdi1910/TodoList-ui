@@ -26,10 +26,7 @@
   }
 
   function replaceTaskMemory(copies, additions = []) {
-    const byId = new Map(copies.map(task => [task.id, task]));
-    window.AppState.tasks = window.AppState.tasks.map(task => byId.get(task.id) || task);
-    window.AppState.tasks.push(...additions);
-    window.AppState.rebuildTaskOrder();
+    window.AppStateSync.replaceTasks(copies, additions);
   }
 
   async function persistTaskRows(tasks) {
@@ -230,33 +227,6 @@
       });
     },
 
-    resolveReminders(reminders = []) {
-      const ids = [...new Set(reminders)].filter(id => id && id !== 'none');
-      const builtin = new Set(window.TodoStorageMappers.BUILTIN_REMINDERS.map(item => item.id));
-      const definitions = [];
-      for (const id of ids) {
-        if (builtin.has(id)) continue;
-        const custom = window.ScheduleComponent?.customReminders?.find(item => item.id === id);
-        if (custom) {
-          definitions.push(window.TodoStorageMappers.customReminderToDefinition(custom));
-          continue;
-        }
-        const match = id.match(/^custom-(\d+)d-(\d+)h-(\d+)m$/);
-        if (!match) throw new Error(`Unknown reminder: ${id}`);
-        const day = Number(match[1]);
-        const hr = Number(match[2]);
-        const min = Number(match[3]);
-        const parts = [];
-        if (day) parts.push(`${day}d`);
-        if (hr) parts.push(`${hr}h`);
-        if (min) parts.push(`${min}m`);
-        definitions.push(window.TodoStorageMappers.customReminderToDefinition({
-          id, day, hr, min, label: `${parts.join(' ')} before`
-        }));
-      }
-      return { ids, definitions: definitions.filter(Boolean) };
-    },
-
     nextRootSortOrder() {
       const values = window.AppState.getRootTasks().map(task => task.sortOrder).filter(Number.isFinite);
       return values.length ? Math.min(...values) - 1 : 0;
@@ -286,7 +256,7 @@
       const normalizedRepeat = engine().normalizeRepeatRule(selectedRepeat);
       const selectedDate = taskData.dueDate !== undefined ? taskData.dueDate : existing?.dueDate;
       const dueDate = normalizedRepeat.mode !== 'none' && !selectedDate ? engine().today() : (selectedDate || null);
-      const task = window.AppState.normalizeTask({
+      const task = window.TaskModel.normalizeTask({
         id: existing?.id || this.createId('task'),
         title,
         description: String(taskData.description ?? existing?.description ?? ''),
@@ -350,9 +320,9 @@
         await window.TodoDb.withTransaction([
           S.TASKS, S.TASK_TAGS, S.REMINDER_DEFINITIONS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
         ], 'readwrite', tx => this.writeTaskAggregate(tx, task, reminderDefinitions));
-        window.AppState.tasks.push(task);
-        window.AppState.rebuildTaskOrder();
-        return task;
+        window.AppStateSync.upsertReminderDefinitions(reminderDefinitions);
+        replaceTaskMemory([], [task]);
+        return window.AppState.getTask(task.id);
       });
     },
 
@@ -363,23 +333,21 @@
         const { task, reminderDefinitions } = this.buildTask(taskData, existing);
         const children = !existing.parentTaskId ? window.AppState.getSubtasks(existing.id) : [];
         const projectChanged = !existing.parentTaskId && existing.project !== task.project;
+        const updatedChildren = projectChanged
+          ? children.map(child => ({ ...child, project: task.project, updatedAt: task.updatedAt }))
+          : [];
         const S = window.TodoDbSchema.STORES;
         await window.TodoDb.withTransaction([
           S.TASKS, S.TASK_TAGS, S.REMINDER_DEFINITIONS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
         ], 'readwrite', async tx => {
           await this.writeTaskAggregate(tx, task, reminderDefinitions);
-          if (projectChanged) {
-            for (const child of children) {
-              await window.TodoRepositories.put(tx, S.TASKS,
-                window.TodoStorageMappers.taskToRow({ ...child, project: task.project, updatedAt: task.updatedAt }));
-            }
+          for (const child of updatedChildren) {
+            await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(child));
           }
         });
-        const index = window.AppState.tasks.findIndex(item => item.id === task.id);
-        window.AppState.tasks[index] = task;
-        if (projectChanged) children.forEach(child => { child.project = task.project; child.updatedAt = task.updatedAt; });
-        window.AppState.rebuildTaskOrder();
-        return task;
+        window.AppStateSync.upsertReminderDefinitions(reminderDefinitions);
+        replaceTaskMemory([task, ...updatedChildren]);
+        return window.AppState.getTask(task.id);
       });
     },
 
@@ -456,8 +424,7 @@
             await window.TodoRepositories.remove(tx, S.TASKS, id);
           }
         });
-        const idSet = new Set(ids);
-        window.AppState.tasks = window.AppState.tasks.filter(item => !idSet.has(item.id));
+        window.AppStateSync.removeTasks(ids);
         return true;
       });
     },
@@ -468,7 +435,7 @@
         await window.TodoDb.withTransaction(S.APP_SETTINGS, 'readwrite', tx =>
           window.TodoRepositories.put(tx, S.APP_SETTINGS, { key, value })
         );
-        window.AppState.settings[key] = value;
+        window.AppStateSync.setSetting(key, value);
         return value;
       });
     }
