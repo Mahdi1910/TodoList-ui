@@ -18,10 +18,9 @@ window.ScheduleTimeReminderMethods = {
 
   resetTime() {
     this.draftTime = this.getCurrentTimeObj();
-    this.draftReminders = []; // Clears reminders on reset
+    this.draftReminders = [];
     this.scrollWheelsToDraftTime();
     this.updateReminderUI();
-    // Note: draftDate remains completely UNCHANGED!
   },
 
   getCurrentTimeObj() {
@@ -49,9 +48,17 @@ window.ScheduleTimeReminderMethods = {
     return { hour: hourStr, minute: minStr, period: periodStr };
   },
 
-  /**
-   * REMINDER CONTEXT MENU & CUSTOM REMINDER MODAL
-   */
+  getCustomReminders() {
+    return window.AppState.getCustomReminderDefinitions()
+      .map(definition => window.TodoStorageMappers.definitionToCustomReminder(definition))
+      .filter(Boolean);
+  },
+
+  getReminderLabel(reminderId) {
+    const definition = window.AppState.getReminderDefinition(reminderId);
+    return definition?.label || reminderId;
+  },
+
   toggleReminderMenu() {
     if (this.menuReminder?.classList.contains('open')) {
       this.closeReminderMenu();
@@ -102,7 +109,7 @@ window.ScheduleTimeReminderMethods = {
 
     if (this.customRemindersContainer) {
       this.customRemindersContainer.innerHTML = '';
-      this.customReminders.forEach(custom => {
+      this.getCustomReminders().forEach(custom => {
         const isSelected = this.draftReminders.includes(custom.id);
         const div = document.createElement('div');
         div.className = `reminder-menu-item ${isSelected ? 'selected' : ''}`;
@@ -129,22 +136,15 @@ window.ScheduleTimeReminderMethods = {
       return;
     }
 
-    const labels = this.draftReminders.map(key => {
-      if (key === 'on_time') return 'On time';
-      if (key === '5_min') return '5m before';
-      if (key === '10_min') return '10m before';
-      if (key === '15_min') return '15m before';
-      const custom = this.customReminders.find(c => c.id === key);
-      return custom ? custom.label : key;
-    });
-
-    this.reminderValDisplay.textContent = labels.join(', ');
+    this.reminderValDisplay.textContent = this.draftReminders
+      .map(key => this.getReminderLabel(key))
+      .join(', ');
   },
 
   async deleteCustomReminder(id) {
     try {
-      await window.AppDataService.deleteReminderDefinition(id);
-      this.customReminders = this.customReminders.filter(item => item.id !== id);
+      const deleted = await window.AppDataService.deleteReminderDefinition(id);
+      if (!deleted) return;
       this.draftReminders = this.draftReminders.filter(key => key !== id);
       if (!this.draftReminders.length) this.draftReminders = ['none'];
       this.updateReminderUI();
@@ -196,15 +196,10 @@ window.ScheduleTimeReminderMethods = {
 
     try {
       await window.AppDataService.saveReminderDefinition(custom);
-      if (!this.customReminders.some(item => item.id === custom.id)) this.customReminders.push(custom);
       this.toggleReminderSelection(custom.id);
       this.closeCustomReminderModal();
     } catch (error) {
       window.AppPersistence.reportError('Could not save this custom reminder.', error);
     }
-  },
-
-  /**
-   * REPEAT PRESETS & CUSTOM REPEAT ENGINE
-   */
+  }
 };
