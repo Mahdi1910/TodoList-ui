@@ -151,6 +151,10 @@ body.modal-open .mobile-bottom-nav {
   display: none;
   flex-direction: column;
   min-width: 160px;
+  max-height: min(320px, calc(100vh - 24px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   z-index: 1050;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -158,6 +162,20 @@ body.modal-open .mobile-bottom-nav {
 
 .context-menu.open {
   display: flex;
+}
+
+/*
+ * Open Task/Subtask menus are temporarily lifted to their modal overlay.
+ * This keeps the keyboard-aware quick card scrollable while preventing that
+ * scroll container from clipping a popover that visually extends above it.
+ */
+.context-menu.context-menu-portal {
+  position: absolute;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  max-width: calc(100% - 16px);
+  z-index: 1200;
 }
 
 .context-menu-item {
