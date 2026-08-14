@@ -8,6 +8,7 @@ window.TasksComponent = {
   selectedReminders: ['on_time'],
   selectedRepeat: null,
   lastFocusedElement: null,
+  typingFocusTarget: null,
 
   init() {
     this.activeListEl = document.getElementById('active-task-list');
@@ -43,15 +44,54 @@ window.TasksComponent = {
     this.initTaskActions();
     this.initTaskHierarchy();
     this.initTaskDrag();
+    this.bindEditorFocusContinuity();
     this.bindEvents();
     this.bindDateTrigger();
     this.initKeyboardAdjustment();
     this.render();
   },
 
+  isEditorTypingInput(element) {
+    return Boolean(
+      element &&
+      element.isConnected &&
+      (element === this.titleInput || element === this.descInput) &&
+      this.addTaskModal?.classList.contains('active')
+    );
+  },
+
+  getActiveEditorInput() {
+    return this.isEditorTypingInput(document.activeElement) ? document.activeElement : null;
+  },
+
+  rememberTypingFocus(element = this.getActiveEditorInput()) {
+    if (this.isEditorTypingInput(element)) this.typingFocusTarget = element;
+    return this.typingFocusTarget;
+  },
+
+  bindAuxiliaryFocusGuard(control) {
+    if (!control) return;
+    control.addEventListener('pointerdown', () => this.rememberTypingFocus());
+    control.addEventListener('mousedown', event => {
+      const activeInput = this.getActiveEditorInput();
+      if (!activeInput) return;
+      this.typingFocusTarget = activeInput;
+      event.preventDefault();
+    });
+  },
+
+  bindEditorFocusContinuity() {
+    [this.titleInput, this.descInput].forEach(input => {
+      input?.addEventListener('focus', () => { this.typingFocusTarget = input; });
+    });
+    [this.btnDate, this.btnPriority, this.btnTags, this.btnProject]
+      .forEach(control => this.bindAuxiliaryFocusGuard(control));
+  },
+
   bindDateTrigger() {
     if (!this.btnDate) return;
     this.btnDate.addEventListener('click', () => {
+      const preserveEditorFocus = this.getActiveEditorInput();
       window.ScheduleComponent?.open(
         this.selectedDueDate,
         this.selectedDueTime,
@@ -67,7 +107,8 @@ window.TasksComponent = {
             this.selectedDueDate = result;
           }
           this.syncDateButton();
-        }
+        },
+        { preserveEditorFocus }
       );
     });
   },
@@ -289,6 +330,7 @@ window.TasksComponent = {
     this.resetSelections();
     this.syncTaskModalBodyState();
     this.lastFocusedElement = null;
+    this.typingFocusTarget = null;
   },
 
   syncTaskModalBodyState() {
