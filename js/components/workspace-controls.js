@@ -6,6 +6,11 @@ window.WorkspaceControls = {
   settingsPanelOpen: false,
 
   init() {
+    const settings = window.AppState.settings || {};
+    this.sortKey = this.normalizeSortKey(settings.sortKey || 'custom');
+    this.sortDirection = settings.sortDirection === 'desc' ? 'desc' : 'asc';
+    this.groupKey = ['none', 'priority', 'date', 'project', 'tag'].includes(settings.groupKey) ? settings.groupKey : 'none';
+
     this.directionBtn = document.getElementById('btn-sort-direction');
     this.menuBtn = document.getElementById('btn-workspace-menu');
     this.menu = document.getElementById('workspace-menu');
@@ -157,7 +162,7 @@ window.WorkspaceControls = {
     if (this.settingsPanelOpen) this.positionSettingsPanel();
   },
 
-  handleMainMenuClick(e) {
+  async handleMainMenuClick(e) {
     if (e.target.closest('#workspace-sort-group-trigger')) {
       this.toggleSettingsPanel();
       return;
@@ -165,20 +170,30 @@ window.WorkspaceControls = {
     const viewItem = e.target.closest('[data-view-type]');
     if (viewItem && !viewItem.disabled) {
       this.closeSettingsPanel();
-      this.setViewType(viewItem.dataset.viewType, { persist: true, render: false });
-      this.syncUI();
-      window.TasksComponent?.render();
+      await this.setViewType(viewItem.dataset.viewType, { persist: true, render: true });
     }
   },
 
-  handleSettingsPanelClick(e) {
+  async handleSettingsPanelClick(e) {
     const sortItem = e.target.closest('[data-sort-key]');
     const groupItem = e.target.closest('[data-group-key]');
     if (!sortItem && !groupItem) return;
-    if (sortItem) this.sortKey = this.normalizeSortKey(sortItem.dataset.sortKey);
-    if (groupItem) this.groupKey = groupItem.dataset.groupKey;
-    this.syncUI();
-    window.TasksComponent?.render();
+    try {
+      if (sortItem) {
+        const value = this.normalizeSortKey(sortItem.dataset.sortKey);
+        await window.AppDataService.setSetting('sortKey', value);
+        this.sortKey = value;
+      }
+      if (groupItem) {
+        const value = groupItem.dataset.groupKey;
+        await window.AppDataService.setSetting('groupKey', value);
+        this.groupKey = value;
+      }
+      this.syncUI();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save the Sort & Group setting.', error);
+    }
   },
 
   handleMenuKeydown(e) {
@@ -201,12 +216,22 @@ window.WorkspaceControls = {
     return viewType === 'kanban' ? 'kanban' : 'list';
   },
 
-  setViewType(viewType, { persist = true, render = true } = {}) {
-    this.viewType = this.normalizeViewType(viewType);
-    if (persist) this.persistViewToCurrentEntity();
-    this.syncUI();
-    if (render) window.TasksComponent?.render();
-    return this.viewType;
+  async setViewType(viewType, { persist = true, render = true } = {}) {
+    const next = this.normalizeViewType(viewType);
+    try {
+      if (persist && window.AppState.currentFilterType === 'project') {
+        await window.AppDataService.setEntityViewType('project', window.AppState.currentFilter, next);
+      } else if (persist && window.AppState.currentFilterType === 'tag') {
+        await window.AppDataService.setEntityViewType('tag', window.AppState.currentFilter, next);
+      }
+      this.viewType = next;
+      this.syncUI();
+      if (render) window.TasksComponent?.render();
+      return next;
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save the selected view.', error);
+      return this.viewType;
+    }
   },
 
   syncViewFromCurrentFilter() {
@@ -231,11 +256,17 @@ window.WorkspaceControls = {
     }
   },
 
-  toggleDirection() {
+  async toggleDirection() {
     if (this.normalizeSortKey(this.sortKey) === 'custom') return;
-    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-    this.syncUI();
-    window.TasksComponent?.render();
+    const next = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    try {
+      await window.AppDataService.setSetting('sortDirection', next);
+      this.sortDirection = next;
+      this.syncUI();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save sort direction.', error);
+    }
   },
 
   syncUI() {
