@@ -167,8 +167,7 @@ window.ScheduleTimeReminderMethods = {
     window.ModalFocusManager.open(this.customReminderModal, {
       trigger: this.btnOpenCustomReminder,
       initialFocus: this.wheelCustomMin,
-      fallbackFocus: this.btnOpenCustomReminder,
-      preserveFocus: this.getPreservedEditorFocusTarget?.() || null
+      fallbackFocus: this.btnOpenCustomReminder
     });
   },
 
