@@ -164,14 +164,18 @@ window.ScheduleTimeReminderMethods = {
       this.scrollWheelToIndex(this.wheelCustomDay, 0, false, 'customDay');
     });
 
-    this.customReminderModal.classList.add('active');
-    this.customReminderModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.customReminderModal, {
+      trigger: this.btnOpenCustomReminder,
+      initialFocus: this.wheelCustomMin,
+      fallbackFocus: this.btnOpenCustomReminder
+    });
   },
 
   closeCustomReminderModal() {
     if (!this.customReminderModal) return;
-    this.customReminderModal.classList.remove('active');
-    this.customReminderModal.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.customReminderModal, {
+      fallbackFocus: this.btnOpenCustomReminder
+    });
   },
 
   async submitCustomReminder() {
