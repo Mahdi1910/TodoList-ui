@@ -1,4 +1,40 @@
 Object.assign(window.AppDataService, {
+  resolveReminders(reminders = []) {
+    const ids = [...new Set(reminders)].filter(id => id && id !== 'none');
+    const builtin = new Set(window.TodoStorageMappers.BUILTIN_REMINDERS.map(item => item.id));
+    const definitions = [];
+
+    for (const id of ids) {
+      if (builtin.has(id)) continue;
+
+      const stored = window.AppState.getReminderDefinition(id);
+      if (stored && !stored.isBuiltin) {
+        definitions.push({ ...stored });
+        continue;
+      }
+
+      const match = id.match(/^custom-(\d+)d-(\d+)h-(\d+)m$/);
+      if (!match) throw new Error(`Unknown reminder: ${id}`);
+      const day = Number(match[1]);
+      const hr = Number(match[2]);
+      const min = Number(match[3]);
+      const parts = [];
+      if (day) parts.push(`${day}d`);
+      if (hr) parts.push(`${hr}h`);
+      if (min) parts.push(`${min}m`);
+      const definition = window.TodoStorageMappers.customReminderToDefinition({
+        id,
+        day,
+        hr,
+        min,
+        label: `${parts.join(' ')} before`
+      });
+      if (definition) definitions.push(definition);
+    }
+
+    return { ids, definitions };
+  },
+
   saveReminderDefinition(custom) {
     return this.enqueue(async () => {
       const definition = window.TodoStorageMappers.customReminderToDefinition(custom);
@@ -7,6 +43,7 @@ Object.assign(window.AppDataService, {
       await window.TodoDb.withTransaction(S.REMINDER_DEFINITIONS, 'readwrite', tx =>
         window.TodoRepositories.put(tx, S.REMINDER_DEFINITIONS, definition)
       );
+      window.AppStateSync.upsertReminderDefinitions([definition]);
       return definition;
     });
   },
@@ -26,10 +63,8 @@ Object.assign(window.AppDataService, {
         }
       );
       if (!deleted) return false;
-      window.AppState.tasks.forEach(task => {
-        task.reminders = (task.reminders || []).filter(id => id !== reminderId);
-        if (!task.reminders.length) task.reminders = ['none'];
-      });
+      window.AppStateSync.removeReminderDefinition(reminderId);
+      window.AppStateSync.removeReminderFromTasks(reminderId);
       return true;
     });
   }
