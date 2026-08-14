@@ -17,7 +17,7 @@ window.TaskHierarchyMethods = {
   },
 
   createTaskFamily(parentTask) {
-    const parent = window.AppState.normalizeTask(parentTask);
+    const parent = parentTask;
     const children = window.WorkspaceControls?.sortTasks(window.AppState.getSubtasks(parent.id))
       || window.AppState.getSubtasks(parent.id);
     const family = document.createElement('div');
