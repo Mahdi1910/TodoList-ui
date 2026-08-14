@@ -108,9 +108,23 @@ window.ScheduleComponent = {
     return value;
   },
 
+  clearPreservedFocusSession() {
+    [this.modalEl, this.customReminderModal, this.customRepeatModal, this.repeatEndModal]
+      .forEach(modal => window.ModalFocusManager?.clearPreservedFocus?.(modal));
+    this.preservedEditorFocusTarget = null;
+  },
+
   getPreservedEditorFocusTarget() {
     const target = this.resolvePreservedEditorFocusTarget(this.preservedEditorFocusTarget);
-    return target && document.activeElement === target ? target : null;
+    if (!target) {
+      if (this.preservedEditorFocusTarget) this.clearPreservedFocusSession();
+      return null;
+    }
+    if (document.activeElement !== target) {
+      this.clearPreservedFocusSession();
+      return null;
+    }
+    return target;
   },
 
   initPreservedFocusGuard() {
@@ -194,7 +208,7 @@ window.ScheduleComponent = {
       fallbackFocus: this.lastFocusedElement
     });
     this.lastFocusedElement = null;
-    this.preservedEditorFocusTarget = null;
+    this.clearPreservedFocusSession();
   },
 
   apply() {
