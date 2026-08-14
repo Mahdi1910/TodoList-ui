@@ -88,31 +88,46 @@ window.SidebarTagMethods = {
     this.tagNameInput?.focus();
   },
 
-  saveTag() {
+  async saveTag() {
     const name = this.tagNameInput.value.trim();
     if (!name) return this.tagNameInput.reportValidity();
-    const parentId = this.tagParentSelect.value || null;
-    const data = { name, icon: this.selectedTagIcon, viewType: this.selectedTagView, parentId };
-    if (this.editingTagId) window.AppState.updateTag(this.editingTagId, data);
-    else window.AppState.addTag(data);
-    this.closeTagModal();
-    this.renderTags();
-    window.TasksComponent?.renderTagMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    const data = {
+      name,
+      icon: this.selectedTagIcon,
+      viewType: this.selectedTagView,
+      parentId: this.tagParentSelect.value || null
+    };
+    this.tagSaveBtn.disabled = true;
+    try {
+      if (this.editingTagId) await window.AppDataService.updateTag(this.editingTagId, data);
+      else await window.AppDataService.createTag(data);
+      this.closeTagModal();
+      this.renderTags();
+      window.TasksComponent?.renderTagMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save this tag.', error);
+    } finally {
+      this.tagSaveBtn.disabled = false;
+    }
   },
 
-  deleteTag(tagId) {
+  async deleteTag(tagId) {
     const tag = window.AppState.getTag(tagId);
     if (!tag) return;
     if (!window.confirm(`Delete tag "${tag.name}"? Child tags will become top-level tags.`)) return;
-    window.AppState.deleteTag(tagId);
-    this.renderTags();
-    window.TasksComponent?.renderTagMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    try {
+      await window.AppDataService.deleteTag(tagId);
+      this.renderTags();
+      window.TasksComponent?.renderTagMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not delete this tag.', error);
+    }
   },
 
   closeTagModal() {
