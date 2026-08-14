@@ -264,18 +264,21 @@ window.TasksComponent = {
       this.submitTaskBtn.setAttribute('aria-label', 'Add Task');
     }
 
-    this.addTaskModal.classList.add('active');
-    this.addTaskModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.addTaskModal, {
+      trigger: this.lastFocusedElement,
+      initialFocus: this.titleInput,
+      fallbackFocus: this.openAddTaskBtn
+    });
     this.syncTaskModalBodyState();
     this.syncQuickInputViewport();
-    requestAnimationFrame(() => this.titleInput?.focus());
   },
 
   closeModal() {
     this.closeAllContextMenus();
     this.closeTaskActionMenu(false);
-    this.addTaskModal.classList.remove('active');
-    this.addTaskModal.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.addTaskModal, {
+      fallbackFocus: this.openAddTaskBtn
+    });
     this.resetQuickInputViewport();
     this.editingTaskId = null;
     this.titleInput.value = '';
@@ -285,7 +288,6 @@ window.TasksComponent = {
     this.parentSubtasksList.innerHTML = '';
     this.resetSelections();
     this.syncTaskModalBodyState();
-    if (this.lastFocusedElement?.isConnected) this.lastFocusedElement.focus();
     this.lastFocusedElement = null;
   },
 
