@@ -37,6 +37,8 @@ Object.assign(window.AppDataService, {
 
   saveReminderDefinition(custom) {
     return this.enqueue(async () => {
+      const builtinIds = new Set(window.TodoStorageMappers.BUILTIN_REMINDERS.map(item => item.id));
+      if (builtinIds.has(custom?.id)) throw new Error('Built-in reminders cannot be replaced.');
       const definition = window.TodoStorageMappers.customReminderToDefinition(custom);
       if (!definition) throw new Error('Invalid custom reminder.');
       const S = window.TodoDbSchema.STORES;
