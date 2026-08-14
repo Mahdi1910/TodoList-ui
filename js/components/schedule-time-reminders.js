@@ -141,12 +141,17 @@ window.ScheduleTimeReminderMethods = {
     this.reminderValDisplay.textContent = labels.join(', ');
   },
 
-  deleteCustomReminder(id) {
-    this.customReminders = this.customReminders.filter(c => c.id !== id);
-    this.draftReminders = this.draftReminders.filter(k => k !== id);
-    if (!this.draftReminders.length) this.draftReminders = ['none'];
-    this.updateReminderUI();
-    this.renderReminderMenuContent();
+  async deleteCustomReminder(id) {
+    try {
+      await window.AppDataService.deleteReminderDefinition(id);
+      this.customReminders = this.customReminders.filter(item => item.id !== id);
+      this.draftReminders = this.draftReminders.filter(key => key !== id);
+      if (!this.draftReminders.length) this.draftReminders = ['none'];
+      this.updateReminderUI();
+      this.renderReminderMenuContent();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not delete this custom reminder.', error);
+    }
   },
 
   openCustomReminderModal() {
@@ -169,28 +174,30 @@ window.ScheduleTimeReminderMethods = {
     this.customReminderModal.setAttribute('aria-hidden', 'true');
   },
 
-  submitCustomReminder() {
+  async submitCustomReminder() {
     const { min, hr, day } = this.draftCustomWheel || { min: 0, hr: 0, day: 0 };
-
-    if (min === 0 && hr === 0 && day === 0) {
-      this.closeCustomReminderModal();
-      return;
-    }
+    if (min === 0 && hr === 0 && day === 0) return this.closeCustomReminderModal();
 
     const parts = [];
-    if (day > 0) parts.push(`${day}d`);
-    if (hr > 0) parts.push(`${hr}h`);
-    if (min > 0) parts.push(`${min}m`);
+    if (day) parts.push(`${day}d`);
+    if (hr) parts.push(`${hr}h`);
+    if (min) parts.push(`${min}m`);
+    const custom = {
+      id: `custom-${day}d-${hr}h-${min}m`,
+      label: `${parts.join(' ')} before`,
+      min,
+      hr,
+      day
+    };
 
-    const id = `custom-${day}d-${hr}h-${min}m`;
-    const label = `${parts.join(' ')} before`;
-
-    if (!this.customReminders.some(c => c.id === id)) {
-      this.customReminders.push({ id, label, min, hr, day });
+    try {
+      await window.AppDataService.saveReminderDefinition(custom);
+      if (!this.customReminders.some(item => item.id === custom.id)) this.customReminders.push(custom);
+      this.toggleReminderSelection(custom.id);
+      this.closeCustomReminderModal();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save this custom reminder.', error);
     }
-
-    this.toggleReminderSelection(id);
-    this.closeCustomReminderModal();
   },
 
   /**
