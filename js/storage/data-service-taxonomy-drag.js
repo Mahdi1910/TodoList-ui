@@ -72,13 +72,7 @@ Object.assign(window.AppDataService, {
   },
 
   applyTaxonomyMemory(entityType, copies, changedIds) {
-    const { items } = this.taxonomyConfig(entityType);
-    const liveById = new Map(items.map(item => [item.id, item]));
-    changedIds.forEach(id => {
-      const live = liveById.get(id);
-      const copy = copies.get(id);
-      if (live && copy) Object.assign(live, copy);
-    });
+    return window.AppStateSync.applyTaxonomyChanges(entityType, copies, changedIds);
   },
 
   prepareTaxonomyDelete(entityType, entityId) {
