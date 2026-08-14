@@ -143,7 +143,8 @@ window.ScheduleRepeatEndMethods = {
     window.ModalFocusManager.open(this.repeatEndModal, {
       trigger: this.repeatEndsRow,
       initialFocus: this.repeatEndTypeWheel,
-      fallbackFocus: this.repeatEndsRow
+      fallbackFocus: this.repeatEndsRow,
+      preserveFocus: this.getPreservedEditorFocusTarget?.() || null
     });
   },
 
