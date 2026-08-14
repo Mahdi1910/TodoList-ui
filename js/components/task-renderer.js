@@ -189,10 +189,18 @@ window.TaskRendererMethods = {
     details.addEventListener('keydown', handleEditTrigger);
     checkboxWrapper.addEventListener('click', e => e.stopPropagation());
 
-    checkbox.addEventListener('change', e => {
+    checkbox.addEventListener('change', async e => {
       e.stopPropagation();
-      window.AppState.toggleTaskStatus(normalized.id);
-      this.refreshAfterTaskMutation();
+      const requested = checkbox.checked;
+      checkbox.disabled = true;
+      try {
+        await window.AppDataService.toggleTaskStatus(normalized.id);
+        this.refreshAfterTaskMutation();
+      } catch (error) {
+        checkbox.checked = !requested;
+        checkbox.disabled = false;
+        window.AppPersistence.reportError('Could not save the task completion change.', error);
+      }
     });
     return card;
   },
