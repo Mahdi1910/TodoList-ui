@@ -9,6 +9,8 @@ window.TasksComponent = {
   selectedRepeat: null,
   lastFocusedElement: null,
   typingFocusTarget: null,
+  pendingDateTypingSnapshot: null,
+  dateOpenGeneration: 0,
 
   init() {
     this.activeListEl = document.getElementById('active-task-list');
@@ -84,32 +86,150 @@ window.TasksComponent = {
     [this.titleInput, this.descInput].forEach(input => {
       input?.addEventListener('focus', () => { this.typingFocusTarget = input; });
     });
-    [this.btnDate, this.btnPriority, this.btnTags, this.btnProject]
+    [this.btnPriority, this.btnTags, this.btnProject]
       .forEach(control => this.bindAuxiliaryFocusGuard(control));
+  },
+
+  captureTypingSnapshot() {
+    const element = this.getActiveEditorInput();
+    if (!element) return null;
+    return {
+      element,
+      selectionStart: typeof element.selectionStart === 'number' ? element.selectionStart : null,
+      selectionEnd: typeof element.selectionEnd === 'number' ? element.selectionEnd : null,
+      selectionDirection: element.selectionDirection || 'none',
+      scrollTop: Number(element.scrollTop) || 0,
+      scrollLeft: Number(element.scrollLeft) || 0,
+      viewportHeight: window.visualViewport?.height ?? null
+    };
+  },
+
+  restoreTypingSnapshot(snapshot) {
+    const element = snapshot?.element;
+    if (!snapshot || !this.isEditorTypingInput(element)) return;
+    try {
+      if (document.activeElement !== element) element.focus({ preventScroll: true });
+    } catch (_) {
+      element.focus();
+    }
+    if (typeof element.setSelectionRange === 'function' && snapshot.selectionStart != null && snapshot.selectionEnd != null) {
+      const max = element.value?.length ?? 0;
+      const start = Math.max(0, Math.min(max, snapshot.selectionStart));
+      const end = Math.max(start, Math.min(max, snapshot.selectionEnd));
+      try {
+        element.setSelectionRange(start, end, snapshot.selectionDirection || 'none');
+      } catch (_) {}
+    }
+    element.scrollTop = snapshot.scrollTop;
+    element.scrollLeft = snapshot.scrollLeft;
+    this.typingFocusTarget = element;
+  },
+
+  waitForKeyboardViewportRecovery(generation, initialHeight = null) {
+    return new Promise(resolve => {
+      const viewport = window.visualViewport;
+      if (!viewport || !window.matchMedia?.('(pointer: coarse)').matches) {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(generation === this.dateOpenGeneration)));
+        return;
+      }
+
+      const startHeight = Number(initialHeight) || viewport.height;
+      let lastHeight = viewport.height;
+      let stableFrames = 0;
+      let sawResize = false;
+      let rafId = null;
+      let timeoutId = null;
+      let finished = false;
+
+      const cleanup = () => {
+        if (rafId != null) cancelAnimationFrame(rafId);
+        if (timeoutId != null) clearTimeout(timeoutId);
+        viewport.removeEventListener('resize', onResize);
+      };
+      const finish = ok => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve(ok);
+      };
+      const onResize = () => {
+        sawResize = true;
+        stableFrames = 0;
+      };
+      const tick = () => {
+        if (generation !== this.dateOpenGeneration) return finish(false);
+        const height = viewport.height;
+        if (Math.abs(height - lastHeight) < 1.5) stableFrames += 1;
+        else stableFrames = 0;
+        lastHeight = height;
+        const expanded = height >= startHeight + 32;
+        if (sawResize && expanded && stableFrames >= 2) return finish(true);
+        rafId = requestAnimationFrame(tick);
+      };
+
+      viewport.addEventListener('resize', onResize);
+      timeoutId = setTimeout(() => finish(generation === this.dateOpenGeneration), 550);
+      rafId = requestAnimationFrame(tick);
+    });
+  },
+
+  cancelPendingDateOpen() {
+    this.dateOpenGeneration += 1;
+    this.pendingDateTypingSnapshot = null;
+  },
+
+  async openScheduleFromDate(snapshot = null) {
+    const generation = ++this.dateOpenGeneration;
+    this.closeAllContextMenus();
+    const initialHeight = snapshot?.viewportHeight ?? window.visualViewport?.height ?? null;
+    if (snapshot?.element === document.activeElement) snapshot.element.blur();
+
+    if (snapshot) {
+      const recovered = await this.waitForKeyboardViewportRecovery(generation, initialHeight);
+      if (!recovered || generation !== this.dateOpenGeneration) return;
+      if (!this.addTaskModal?.classList.contains('active') || !this.isEditorTypingInput(snapshot.element)) return;
+    }
+
+    window.ScheduleComponent?.open(
+      this.selectedDueDate,
+      this.selectedDueTime,
+      this.selectedReminders,
+      this.selectedRepeat,
+      result => {
+        if (typeof result === 'object' && result !== null) {
+          this.selectedDueDate = result.dueDate;
+          this.selectedDueTime = result.dueTime;
+          this.selectedReminders = result.reminders || ['on_time'];
+          this.selectedRepeat = result.repeat || null;
+        } else {
+          this.selectedDueDate = result;
+        }
+        this.syncDateButton();
+      },
+      snapshot ? {
+        returnFocusTarget: snapshot.element,
+        afterClose: () => {
+          if (generation === this.dateOpenGeneration) this.restoreTypingSnapshot(snapshot);
+        }
+      } : null
+    );
   },
 
   bindDateTrigger() {
     if (!this.btnDate) return;
-    this.btnDate.addEventListener('click', () => {
-      const preserveEditorFocus = this.getActiveEditorInput();
-      window.ScheduleComponent?.open(
-        this.selectedDueDate,
-        this.selectedDueTime,
-        this.selectedReminders,
-        this.selectedRepeat,
-        result => {
-          if (typeof result === 'object' && result !== null) {
-            this.selectedDueDate = result.dueDate;
-            this.selectedDueTime = result.dueTime;
-            this.selectedReminders = result.reminders || ['on_time'];
-            this.selectedRepeat = result.repeat || null;
-          } else {
-            this.selectedDueDate = result;
-          }
-          this.syncDateButton();
-        },
-        { preserveEditorFocus }
-      );
+    const capture = () => {
+      this.pendingDateTypingSnapshot = this.captureTypingSnapshot();
+    };
+    this.btnDate.addEventListener('pointerdown', capture);
+    this.btnDate.addEventListener('mousedown', () => {
+      if (!this.pendingDateTypingSnapshot) capture();
+    });
+    this.btnDate.addEventListener('pointercancel', () => { this.pendingDateTypingSnapshot = null; });
+    this.btnDate.addEventListener('keydown', () => { this.pendingDateTypingSnapshot = null; });
+    this.btnDate.addEventListener('click', event => {
+      const snapshot = event.detail === 0 ? null : this.pendingDateTypingSnapshot;
+      this.pendingDateTypingSnapshot = null;
+      this.openScheduleFromDate(snapshot);
     });
   },
 
@@ -315,6 +435,7 @@ window.TasksComponent = {
   },
 
   closeModal() {
+    this.cancelPendingDateOpen();
     this.closeAllContextMenus();
     this.closeTaskActionMenu(false);
     window.ModalFocusManager.close(this.addTaskModal, {
