@@ -109,7 +109,6 @@ window.SettingsComponent = {
     if (!this.backupServicesPromise) {
       this.backupServicesPromise = (async () => {
         const scripts = [
-          'js/storage/data-service-backup.js',
           'js/storage/backup-validation.js',
           'js/storage/backup-service.js'
         ];
