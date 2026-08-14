@@ -138,20 +138,22 @@ window.ScheduleRepeatEndMethods = {
     requestAnimationFrame(() => {
       this.scrollWheelToIndex(this.repeatEndTypeWheel, typeIndex, false, '');
       this.scrollWheelToIndex(this.repeatEndCountWheel, count - 1, false, '');
-      this.repeatEndTypeWheel?.focus();
     });
     this.setRepeatEndType(this.repeatEndDraft.type);
-    this.repeatEndModal.classList.add('active');
-    this.repeatEndModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.repeatEndModal, {
+      trigger: this.repeatEndsRow,
+      initialFocus: this.repeatEndTypeWheel,
+      fallbackFocus: this.repeatEndsRow
+    });
   },
 
   closeRepeatEndModal() {
-    this.repeatEndModal?.classList.remove('active');
-    this.repeatEndModal?.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.repeatEndModal, {
+      fallbackFocus: this.repeatEndsRow
+    });
     this.repeatEndDraft = null;
     this.repeatEndSnapshot = null;
     if (this.repeatEndError) this.repeatEndError.textContent = '';
-    this.repeatEndsRow?.focus();
   },
 
   handleRepeatEndKeydown(event) {
