@@ -5,6 +5,8 @@
 
 const BOOTSTRAP_SCRIPTS = [
   'js/components/modal-focus.js',
+  'js/task-model.js',
+  'js/state-sync.js',
   'js/taxonomy-order.js',
   'js/task-filter.js',
   'js/components/task-taxonomy-menu-order.js',
@@ -83,6 +85,9 @@ async function runStage(stage, work) {
 
 function assertIntegrations() {
   if (!window.ModalFocusManager) throw new Error('Modal focus manager could not be loaded.');
+  if (!window.TaskModel || !window.AppStateSync || !window.TaskOrderMethods) {
+    throw new Error('Task model/state synchronization integration could not be loaded.');
+  }
   if (!window.TasksComponent || !window.TaskDragHierarchyMethods || !window.TaskTaxonomyMenuOrderMethods || !window.TaskFilter) {
     throw new Error('Task hierarchy/taxonomy/filter integration components could not be loaded.');
   }
