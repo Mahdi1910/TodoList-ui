@@ -33,6 +33,7 @@ window.ModalFocusManager = (() => {
       pendingFrame: null,
       fallbackFocus: null,
       preserveFocus: null,
+      preserveCancelled: false,
       parentWasInerted: false
     };
     if (fallbackFocus) record.fallbackFocus = fallbackFocus;
@@ -53,7 +54,9 @@ window.ModalFocusManager = (() => {
 
   function clearPreservedFocus(modal) {
     const record = records.get(modal);
-    if (record) record.preserveFocus = null;
+    if (!record?.preserveFocus) return;
+    record.preserveFocus = null;
+    record.preserveCancelled = true;
   }
 
   function open(modal, { trigger = null, initialFocus = null, fallbackFocus = null, preserveFocus = null } = {}) {
@@ -64,6 +67,7 @@ window.ModalFocusManager = (() => {
     const preservedTarget = resolve(preserveFocus);
     const canPreserve = Boolean(preservedTarget && document.activeElement === preservedTarget);
     record.preserveFocus = canPreserve ? preservedTarget : null;
+    record.preserveCancelled = false;
     record.returnFocus = record.preserveFocus || resolve(trigger) || resolve(document.activeElement);
     record.parentModal = top() && top() !== modal ? top() : null;
     record.parentWasInerted = false;
@@ -114,7 +118,9 @@ window.ModalFocusManager = (() => {
     const activeBeforeClose = document.activeElement;
     let target = null;
 
-    if (preservedTarget) {
+    if (record.preserveCancelled) {
+      target = null;
+    } else if (preservedTarget) {
       if (activeBeforeClose === preservedTarget) {
         target = null;
       } else if (modal.contains(activeBeforeClose)) {
@@ -129,7 +135,13 @@ window.ModalFocusManager = (() => {
     target?.focus();
 
     if (modal.contains(document.activeElement)) {
-      const emergency = preservedTarget || resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
+      let emergency = preservedTarget;
+      if (record.preserveCancelled && record.parentModal?.classList.contains('active')) {
+        emergency = focusable(record.parentModal).find(element =>
+          !['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)
+        ) || null;
+      }
+      emergency ||= resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
       emergency?.focus();
     }
     if (modal.contains(document.activeElement)) return false;
@@ -139,6 +151,7 @@ window.ModalFocusManager = (() => {
     record.returnFocus = null;
     record.parentModal = null;
     record.preserveFocus = null;
+    record.preserveCancelled = false;
     record.parentWasInerted = false;
     return true;
   }
