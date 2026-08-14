@@ -20,8 +20,8 @@ Object.assign(window.AppDataService, {
       await window.TodoDb.withTransaction(S.PROJECTS, 'readwrite', tx =>
         window.TodoRepositories.add(tx, S.PROJECTS, project)
       );
-      window.AppState.projects.push(project);
-      return project;
+      window.AppStateSync.upsertTaxonomyEntity('project', project);
+      return window.AppState.getProject(project.id);
     });
   },
 
@@ -33,7 +33,9 @@ Object.assign(window.AppDataService, {
     return this.enqueue(async () => {
       if (!window.AppState.getProject(projectId)) return false;
       const plan = this.prepareTaxonomyDelete('project', projectId);
-      const affectedTaskIds = new Set(window.AppState.tasks.filter(item => item.project === projectId).map(item => item.id));
+      const affectedTasks = window.AppState.tasks
+        .filter(item => item.project === projectId)
+        .map(item => ({ ...item, project: '', updatedAt: plan.now }));
       const S = window.TodoDbSchema.STORES;
       await window.TodoDb.withTransaction([S.PROJECTS, S.TASKS], 'readwrite', async tx => {
         for (const id of plan.changed) {
@@ -47,8 +49,8 @@ Object.assign(window.AppDataService, {
         await window.TodoRepositories.remove(tx, S.PROJECTS, projectId);
       });
       this.applyTaxonomyMemory('project', plan.copies, plan.changed);
-      window.AppState.deleteProject(projectId);
-      window.AppState.tasks.forEach(item => { if (affectedTaskIds.has(item.id)) item.updatedAt = plan.now; });
+      window.AppStateSync.removeTaxonomyEntity('project', projectId);
+      window.AppStateSync.replaceTasks(affectedTasks);
       return true;
     });
   },
@@ -69,8 +71,8 @@ Object.assign(window.AppDataService, {
       await window.TodoDb.withTransaction(S.TAGS, 'readwrite', tx =>
         window.TodoRepositories.add(tx, S.TAGS, tag)
       );
-      window.AppState.tags.push(tag);
-      return tag;
+      window.AppStateSync.upsertTaxonomyEntity('tag', tag);
+      return window.AppState.getTag(tag.id);
     });
   },
 
@@ -82,6 +84,9 @@ Object.assign(window.AppDataService, {
     return this.enqueue(async () => {
       if (!window.AppState.getTag(tagId)) return false;
       const plan = this.prepareTaxonomyDelete('tag', tagId);
+      const affectedTasks = window.AppState.tasks
+        .filter(task => (task.tags || []).includes(tagId))
+        .map(task => ({ ...task, tags: (task.tags || []).filter(id => id !== tagId) }));
       const S = window.TodoDbSchema.STORES;
       await window.TodoDb.withTransaction([S.TAGS, S.TASK_TAGS], 'readwrite', async tx => {
         for (const id of plan.changed) {
@@ -92,7 +97,8 @@ Object.assign(window.AppDataService, {
         await window.TodoRepositories.remove(tx, S.TAGS, tagId);
       });
       this.applyTaxonomyMemory('tag', plan.copies, plan.changed);
-      window.AppState.deleteTag(tagId);
+      window.AppStateSync.removeTaxonomyEntity('tag', tagId);
+      window.AppStateSync.replaceTasks(affectedTasks);
       return true;
     });
   },
@@ -108,8 +114,8 @@ Object.assign(window.AppDataService, {
       await window.TodoDb.withTransaction(storeName, 'readwrite', tx =>
         window.TodoRepositories.put(tx, storeName, updated)
       );
-      Object.assign(entity, updated);
-      return entity;
+      window.AppStateSync.upsertTaxonomyEntity(isProject ? 'project' : 'tag', updated);
+      return isProject ? window.AppState.getProject(entityId) : window.AppState.getTag(entityId);
     });
   }
 });
