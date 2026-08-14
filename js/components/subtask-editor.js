@@ -9,6 +9,8 @@ window.SubtaskEditorComponent = {
   selectedRepeat: null,
   lastFocusedElement: null,
   typingFocusTarget: null,
+  pendingDateTypingSnapshot: null,
+  dateOpenGeneration: 0,
 
   init() {
     this.modal = document.getElementById('subtask-modal');
@@ -65,8 +67,96 @@ window.SubtaskEditorComponent = {
     [this.titleInput, this.descInput].forEach(input => {
       input?.addEventListener('focus', () => { this.typingFocusTarget = input; });
     });
-    [this.btnDate, this.btnPriority, this.btnTags]
+    [this.btnPriority, this.btnTags]
       .forEach(control => this.bindAuxiliaryFocusGuard(control));
+  },
+
+  captureTypingSnapshot() {
+    const element = this.getActiveEditorInput();
+    if (!element) return null;
+    return {
+      element,
+      selectionStart: typeof element.selectionStart === 'number' ? element.selectionStart : null,
+      selectionEnd: typeof element.selectionEnd === 'number' ? element.selectionEnd : null,
+      selectionDirection: element.selectionDirection || 'none',
+      scrollTop: Number(element.scrollTop) || 0,
+      scrollLeft: Number(element.scrollLeft) || 0,
+      viewportHeight: window.visualViewport?.height ?? null
+    };
+  },
+
+  restoreTypingSnapshot(snapshot) {
+    const element = snapshot?.element;
+    if (!snapshot || !this.isEditorTypingInput(element)) return;
+    try {
+      if (document.activeElement !== element) element.focus({ preventScroll: true });
+    } catch (_) {
+      element.focus();
+    }
+    if (typeof element.setSelectionRange === 'function' && snapshot.selectionStart != null && snapshot.selectionEnd != null) {
+      const max = element.value?.length ?? 0;
+      const start = Math.max(0, Math.min(max, snapshot.selectionStart));
+      const end = Math.max(start, Math.min(max, snapshot.selectionEnd));
+      try {
+        element.setSelectionRange(start, end, snapshot.selectionDirection || 'none');
+      } catch (_) {}
+    }
+    element.scrollTop = snapshot.scrollTop;
+    element.scrollLeft = snapshot.scrollLeft;
+    this.typingFocusTarget = element;
+  },
+
+  waitForKeyboardViewportRecovery(generation, initialHeight = null) {
+    return new Promise(resolve => {
+      const viewport = window.visualViewport;
+      if (!viewport || !window.matchMedia?.('(pointer: coarse)').matches) {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(generation === this.dateOpenGeneration)));
+        return;
+      }
+
+      const startHeight = Number(initialHeight) || viewport.height;
+      let lastHeight = viewport.height;
+      let stableFrames = 0;
+      let sawResize = false;
+      let rafId = null;
+      let timeoutId = null;
+      let finished = false;
+
+      const cleanup = () => {
+        if (rafId != null) cancelAnimationFrame(rafId);
+        if (timeoutId != null) clearTimeout(timeoutId);
+        viewport.removeEventListener('resize', onResize);
+      };
+      const finish = ok => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve(ok);
+      };
+      const onResize = () => {
+        sawResize = true;
+        stableFrames = 0;
+      };
+      const tick = () => {
+        if (generation !== this.dateOpenGeneration) return finish(false);
+        const height = viewport.height;
+        if (Math.abs(height - lastHeight) < 1.5) stableFrames += 1;
+        else stableFrames = 0;
+        lastHeight = height;
+        const expanded = height >= startHeight + 32;
+        if (sawResize && expanded && stableFrames >= 2) return finish(true);
+        rafId = requestAnimationFrame(tick);
+      };
+
+      viewport.addEventListener('resize', onResize);
+      timeoutId = setTimeout(() => finish(generation === this.dateOpenGeneration), 550);
+      rafId = requestAnimationFrame(tick);
+    });
+  },
+
+  cancelPendingDateOpen() {
+    this.dateOpenGeneration += 1;
+    this.pendingDateTypingSnapshot = null;
   },
 
   getMenuInteractionFromClick(event) {
@@ -90,7 +180,22 @@ window.SubtaskEditorComponent = {
       if (e.target === this.modal) this.close();
     });
     this.modal?.addEventListener('keydown', e => this.handleKeydown(e));
-    this.btnDate?.addEventListener('click', () => this.openSchedule());
+
+    const captureDate = () => {
+      this.pendingDateTypingSnapshot = this.captureTypingSnapshot();
+    };
+    this.btnDate?.addEventListener('pointerdown', captureDate);
+    this.btnDate?.addEventListener('mousedown', () => {
+      if (!this.pendingDateTypingSnapshot) captureDate();
+    });
+    this.btnDate?.addEventListener('pointercancel', () => { this.pendingDateTypingSnapshot = null; });
+    this.btnDate?.addEventListener('keydown', () => { this.pendingDateTypingSnapshot = null; });
+    this.btnDate?.addEventListener('click', event => {
+      const snapshot = event.detail === 0 ? null : this.pendingDateTypingSnapshot;
+      this.pendingDateTypingSnapshot = null;
+      this.openSchedule(snapshot);
+    });
+
     this.btnPriority?.addEventListener('click', e => {
       e.stopPropagation();
       const interaction = this.getMenuInteractionFromClick(e);
@@ -185,6 +290,7 @@ window.SubtaskEditorComponent = {
 
   close() {
     if (!this.modal?.classList.contains('active')) return;
+    this.cancelPendingDateOpen();
     this.closeMenus();
     window.ModalFocusManager.close(this.modal, {
       fallbackFocus: window.TasksComponent?.openAddTaskBtn
@@ -232,9 +338,18 @@ window.SubtaskEditorComponent = {
     }
   },
 
-  openSchedule() {
-    const preserveEditorFocus = this.getActiveEditorInput();
+  async openSchedule(snapshot = null) {
+    const generation = ++this.dateOpenGeneration;
     this.closeMenus();
+    const initialHeight = snapshot?.viewportHeight ?? window.visualViewport?.height ?? null;
+    if (snapshot?.element === document.activeElement) snapshot.element.blur();
+
+    if (snapshot) {
+      const recovered = await this.waitForKeyboardViewportRecovery(generation, initialHeight);
+      if (!recovered || generation !== this.dateOpenGeneration) return;
+      if (!this.modal?.classList.contains('active') || !this.isEditorTypingInput(snapshot.element)) return;
+    }
+
     window.ScheduleComponent?.open(
       this.selectedDueDate,
       this.selectedDueTime,
@@ -247,7 +362,12 @@ window.SubtaskEditorComponent = {
         this.selectedRepeat = result?.repeat ? JSON.parse(JSON.stringify(result.repeat)) : null;
         this.syncScheduleUI();
       },
-      { preserveEditorFocus }
+      snapshot ? {
+        returnFocusTarget: snapshot.element,
+        afterClose: () => {
+          if (generation === this.dateOpenGeneration) this.restoreTypingSnapshot(snapshot);
+        }
+      } : null
     );
   },
 
