@@ -25,10 +25,10 @@ const BOOTSTRAP_SCRIPTS = [
   'js/storage/repeat-storage.js',
   'js/storage/data-service-repeat.js',
   'js/storage/data-service-taxonomy.js',
+  'js/storage/data-service-reminders.js',
   'js/storage/data-service-taxonomy-drag.js',
   'js/storage/data-service-drag.js',
-  'js/storage/data-service-hierarchy.js',
-  'js/storage/ui-persistence-bindings.js'
+  'js/storage/data-service-hierarchy.js'
 ];
 
 const BOOTSTRAP_MESSAGES = {
@@ -131,7 +131,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await runStage('DATABASE_OPEN', () => window.AppPersistence.initialize());
     await runStage('HYDRATION', () => window.AppPersistence.hydrateState());
     await runStage('DATABASE_REPAIR', () => window.AppDataService.repairRepeatState());
-    await runStage('INTEGRATION', async () => window.bindPersistentUiMutations());
     await runStage('UI_INIT', async () => {
       window.SidebarComponent.init();
       window.SidebarComponent.initTaxonomyDrag();
