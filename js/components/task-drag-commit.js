@@ -1,5 +1,29 @@
 window.TaskDragCommitMethods = {
-  commitTaskDrag() {
+  async commitTaskDrag() {
+    const session = this.dragSession;
+    if (!session) return;
+    const destination = this.getDropLaneContext(session.currentLane);
+    if (this.isHierarchyPreviewUnchanged(session, destination)) {
+      this.cleanupTaskDrag(true);
+      return;
+    }
+    try {
+      await window.AppDataService.commitHierarchyDrag({
+        taskId: session.taskId,
+        targetLevel: session.previewLevel,
+        targetParentId: session.previewParentId,
+        beforeTaskId: session.previewBeforeTaskId,
+        afterTaskId: session.previewAfterTaskId,
+        sourceContext: session.sourceContext,
+        destinationContext: destination
+      });
+      if (window.WorkspaceControls) {
+        window.WorkspaceControls.sortKey = 'custom';
+        window.WorkspaceControls.syncUI();
+      }
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save the new task hierarchy or position.', error);
+    }
     this.cleanupTaskDrag(true);
   },
 
