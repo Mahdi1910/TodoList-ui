@@ -91,31 +91,46 @@ window.SidebarProjectMethods = {
     this.projectNameInput?.focus();
   },
 
-  saveProject() {
+  async saveProject() {
     const name = this.projectNameInput.value.trim();
     if (!name) return this.projectNameInput.reportValidity();
-    const parentId = this.projectParentSelect?.value || null;
-    const data = { name, icon: this.selectedProjectIcon, viewType: this.selectedProjectView, parentId };
-    if (this.editingProjectId) window.AppState.updateProject(this.editingProjectId, data);
-    else window.AppState.addProject(data);
-    this.closeProjectModal();
-    this.renderProjects();
-    window.TasksComponent?.renderProjectMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    const data = {
+      name,
+      icon: this.selectedProjectIcon,
+      viewType: this.selectedProjectView,
+      parentId: this.projectParentSelect?.value || null
+    };
+    this.projectSaveBtn.disabled = true;
+    try {
+      if (this.editingProjectId) await window.AppDataService.updateProject(this.editingProjectId, data);
+      else await window.AppDataService.createProject(data);
+      this.closeProjectModal();
+      this.renderProjects();
+      window.TasksComponent?.renderProjectMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save this project.', error);
+    } finally {
+      this.projectSaveBtn.disabled = false;
+    }
   },
 
-  deleteProject(projectId) {
+  async deleteProject(projectId) {
     const project = window.AppState.getProject(projectId);
     if (!project) return;
     if (!window.confirm(`Delete project "${project.name}"? Its direct sub-projects will become top-level.`)) return;
-    window.AppState.deleteProject(projectId);
-    this.renderProjects();
-    window.TasksComponent?.renderProjectMenu();
-    this.syncCurrentView();
-    this.updateCounts();
-    window.TasksComponent?.render();
+    try {
+      await window.AppDataService.deleteProject(projectId);
+      this.renderProjects();
+      window.TasksComponent?.renderProjectMenu();
+      this.syncCurrentView();
+      this.updateCounts();
+      window.TasksComponent?.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not delete this project.', error);
+    }
   },
 
   closeProjectModal() {
