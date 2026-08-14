@@ -397,7 +397,7 @@ window.TasksComponent = {
     this.lastFocusedElement = document.activeElement;
 
     if (taskToEdit) {
-      const normalized = window.AppState.normalizeTask(taskToEdit);
+      const normalized = taskToEdit;
       this.editingTaskId = normalized.id;
       this.titleInput.value = normalized.title;
       this.descInput.value = normalized.description || '';
