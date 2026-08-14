@@ -100,8 +100,7 @@ window.ScheduleRepeatMethods = {
     window.ModalFocusManager.open(this.customRepeatModal, {
       trigger: this.btnOpenCustomRepeat,
       initialFocus: this.wheelRepeatInterval,
-      fallbackFocus: this.btnOpenCustomRepeat,
-      preserveFocus: this.getPreservedEditorFocusTarget?.() || null
+      fallbackFocus: this.btnOpenCustomRepeat
     });
   },
 
