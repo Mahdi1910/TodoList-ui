@@ -15,6 +15,7 @@ window.ScheduleComponent = {
   draftRepeat: { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } },
   onApplyCallback: null,
   lastFocusedElement: null,
+  preservedEditorFocusTarget: null,
 
   ITEM_HEIGHT: 40,
   VISIBLE_ITEMS: 5,
@@ -92,10 +93,52 @@ window.ScheduleComponent = {
 
     this.initWheels();
     this.bindEvents();
+    this.initPreservedFocusGuard();
   },
 
-  open(initialDueDateStr = null, initialTimeStr = null, initialReminders = null, initialRepeat = null, onApply = null) {
+  resolvePreservedEditorFocusTarget(value) {
+    const allowedIds = new Set([
+      'task-title-input',
+      'task-desc-input',
+      'subtask-title-input',
+      'subtask-desc-input'
+    ]);
+    if (!value || !value.isConnected || !allowedIds.has(value.id)) return null;
+    if (typeof value.focus !== 'function' || value.hidden || value.closest?.('[hidden]')) return null;
+    return value;
+  },
+
+  getPreservedEditorFocusTarget() {
+    const target = this.resolvePreservedEditorFocusTarget(this.preservedEditorFocusTarget);
+    return target && document.activeElement === target ? target : null;
+  },
+
+  initPreservedFocusGuard() {
+    if (this._preservedFocusGuardBound) return;
+    this._preservedFocusGuardBound = true;
+    document.addEventListener('mousedown', event => {
+      const preserved = this.getPreservedEditorFocusTarget();
+      if (!preserved) return;
+
+      const surface = event.target.closest?.(
+        '#schedule-modal, #custom-reminder-modal, #custom-repeat-modal, #repeat-end-modal'
+      );
+      if (!surface?.classList.contains('active')) return;
+      if (event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+
+      const focusableControl = event.target.closest?.(
+        'button, [tabindex]:not([tabindex="-1"]), [role="button"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="tab"]'
+      );
+      if (focusableControl) event.preventDefault();
+    }, true);
+  },
+
+  open(initialDueDateStr = null, initialTimeStr = null, initialReminders = null, initialRepeat = null, onApply = null, focusPolicy = null) {
     this.lastFocusedElement = document.activeElement;
+    const requestedPreservedFocus = this.resolvePreservedEditorFocusTarget(focusPolicy?.preserveEditorFocus || null);
+    this.preservedEditorFocusTarget = requestedPreservedFocus && document.activeElement === requestedPreservedFocus
+      ? requestedPreservedFocus
+      : null;
     this.draftDate = initialDueDateStr || null;
     this.onApplyCallback = onApply;
 
@@ -134,7 +177,8 @@ window.ScheduleComponent = {
       initialFocus: () => this.gridEl?.querySelector('.calendar-day.selected') ||
                           this.gridEl?.querySelector('.calendar-day.today') ||
                           this.btnQuickToday,
-      fallbackFocus: this.lastFocusedElement
+      fallbackFocus: this.lastFocusedElement,
+      preserveFocus: this.getPreservedEditorFocusTarget()
     });
   },
 
@@ -150,6 +194,7 @@ window.ScheduleComponent = {
       fallbackFocus: this.lastFocusedElement
     });
     this.lastFocusedElement = null;
+    this.preservedEditorFocusTarget = null;
   },
 
   apply() {
