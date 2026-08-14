@@ -11,7 +11,6 @@ window.ScheduleComponent = {
   draftDate: null, // "YYYY-MM-DD" string or null
   draftTime: null, // { hour: "10", minute: "30", period: "PM" } or null
   draftReminders: ['on_time'], // Array of reminder keys e.g. ["none"], ["on_time"], ["5_min"]
-  customReminders: [], // Array of { id, label, value, unit }
   draftRepeat: { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } },
   onApplyCallback: null,
   lastFocusedElement: null,
@@ -120,7 +119,6 @@ window.ScheduleComponent = {
       this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
     }
 
-    // Set view date to selected date or current date
     if (this.draftDate) {
       const parts = this.draftDate.split('-').map(Number);
       this.currentViewDate = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -163,13 +161,10 @@ window.ScheduleComponent = {
       const formattedTime = this.draftTime
         ? `${this.draftTime.hour}:${this.draftTime.minute} ${this.draftTime.period}`
         : null;
-
-      // If time is set without a specific date, automatically assign today's date
       let finalDate = this.draftDate;
       if (formattedTime && !finalDate) {
         finalDate = this.formatDateStr(new Date());
       }
-
       this.onApplyCallback({
         dueDate: finalDate,
         dueTime: formattedTime,
@@ -214,7 +209,6 @@ window.ScheduleComponent = {
       .filter(el => !el.disabled && el.offsetParent !== null);
 
     if (!focusable.length) return;
-
     const first = focusable[0];
     const last = focusable.at(-1);
 
