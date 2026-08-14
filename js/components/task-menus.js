@@ -169,7 +169,7 @@ window.TaskMenuMethods = {
       if (key === 'project') this.selectedProject = value;
     }
     this.syncMenuSelection(menu);
-    const trigger = menu.previousElementSibling;
+    const trigger = this.getContextMenuTrigger(menu);
     const shouldBeActive = mode === 'multi'
       ? this.selectedTags.length > 0
       : (key === 'project' ? Boolean(this.selectedProject)
@@ -183,6 +183,97 @@ window.TaskMenuMethods = {
       item.setAttribute('aria-selected', item.classList.contains('selected') ? 'true' : 'false');
     });
   },
+
+  getContextMenuPortalMap() {
+    if (!this._contextMenuPortals) this._contextMenuPortals = new Map();
+    return this._contextMenuPortals;
+  },
+
+  getContextMenuTrigger(menu, fallback = null) {
+    return this.getContextMenuPortalMap().get(menu)?.trigger || fallback || menu?.previousElementSibling || null;
+  },
+
+  mountContextMenu(menu, trigger) {
+    const portals = this.getContextMenuPortalMap();
+    if (portals.has(menu)) return;
+    const placeholder = document.createComment(`context-menu:${menu.id || 'menu'}`);
+    const parent = menu.parentNode;
+    parent?.insertBefore(placeholder, menu);
+    const host = trigger?.closest('.modal-overlay') || this.addTaskModal;
+    if (!host) return;
+    host.appendChild(menu);
+    menu.classList.add('context-menu-portal');
+    portals.set(menu, { placeholder, parent, trigger, host });
+  },
+
+  restoreContextMenu(menu) {
+    const portals = this.getContextMenuPortalMap();
+    const portal = portals.get(menu);
+    if (!portal) return;
+    menu.classList.remove('context-menu-portal');
+    menu.style.removeProperty('top');
+    menu.style.removeProperty('left');
+    menu.style.removeProperty('right');
+    menu.style.removeProperty('bottom');
+    menu.style.removeProperty('max-height');
+    if (portal.placeholder?.parentNode) portal.placeholder.replaceWith(menu);
+    else portal.parent?.appendChild(menu);
+    portals.delete(menu);
+  },
+
+  positionContextMenu(menu, trigger = this.getContextMenuTrigger(menu)) {
+    if (!menu?.classList.contains('open') || !trigger) return;
+    const portal = this.getContextMenuPortalMap().get(menu);
+    const host = portal?.host || trigger.closest('.modal-overlay') || this.addTaskModal;
+    if (!host) return;
+
+    const hostRect = host.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const gap = 8;
+    const edge = 8;
+    const spaceAbove = Math.max(0, triggerRect.top - hostRect.top - gap - edge);
+    const spaceBelow = Math.max(0, hostRect.bottom - triggerRect.bottom - gap - edge);
+
+    menu.style.top = '0px';
+    menu.style.left = '0px';
+    menu.style.bottom = 'auto';
+    menu.style.right = 'auto';
+    menu.style.maxHeight = `${Math.max(80, Math.floor(Math.max(spaceAbove, spaceBelow)))}px`;
+
+    const preferredHeight = Math.min(menu.scrollHeight, 320);
+    const openAbove = spaceAbove >= Math.min(preferredHeight, 140) || spaceAbove >= spaceBelow;
+    const available = Math.max(80, Math.floor(openAbove ? spaceAbove : spaceBelow));
+    menu.style.maxHeight = `${available}px`;
+
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(edge, triggerRect.left - hostRect.left),
+      Math.max(edge, hostRect.width - rect.width - edge)
+    );
+    let top = openAbove
+      ? triggerRect.top - hostRect.top - gap - rect.height
+      : triggerRect.bottom - hostRect.top + gap;
+    top = Math.min(Math.max(edge, top), Math.max(edge, hostRect.height - rect.height - edge));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  },
+
+  ensureContextMenuViewportListeners() {
+    if (this._contextMenuViewportListenersBound) return;
+    this._contextMenuViewportListenersBound = true;
+    const reposition = () => this.positionOpenContextMenus();
+    window.visualViewport?.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('scroll', reposition);
+    window.addEventListener('resize', reposition);
+  },
+
+  positionOpenContextMenus() {
+    [this.menuPriority, this.menuTags, this.menuProject].forEach(menu => {
+      if (menu?.classList.contains('open')) this.positionContextMenu(menu);
+    });
+  },
+
   toggleContextMenu(menu, trigger) {
     if (menu.classList.contains('open')) this.closeContextMenu(menu, trigger);
     else this.openContextMenu(menu, trigger);
@@ -192,15 +283,22 @@ window.TaskMenuMethods = {
     window.WorkspaceControls?.closeMenu();
     this.closeTaskActionMenu?.(false);
     this.closeAllContextMenus();
+    this.mountContextMenu(menu, trigger);
     menu.classList.add('open');
     trigger?.setAttribute('aria-expanded', 'true');
+    this.ensureContextMenuViewportListeners();
+    this.positionContextMenu(menu, trigger);
+    requestAnimationFrame(() => this.positionContextMenu(menu, trigger));
     const first = menu.querySelector('.context-menu-item.selected') || menu.querySelector('.context-menu-item');
     first?.focus();
   },
 
-  closeContextMenu(menu, trigger = menu?.previousElementSibling) {
-    menu?.classList.remove('open');
-    trigger?.setAttribute('aria-expanded', 'false');
+  closeContextMenu(menu, trigger = this.getContextMenuTrigger(menu)) {
+    if (!menu) return;
+    const resolvedTrigger = this.getContextMenuTrigger(menu, trigger);
+    menu.classList.remove('open');
+    resolvedTrigger?.setAttribute('aria-expanded', 'false');
+    this.restoreContextMenu(menu);
   },
 
   closeAllContextMenus() {
@@ -229,7 +327,7 @@ window.TaskMenuMethods = {
       this.selectMenuItem(item, menu, mode, key);
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      const trigger = menu.previousElementSibling;
+      const trigger = this.getContextMenuTrigger(menu);
       this.closeContextMenu(menu, trigger);
       trigger?.focus();
     }
