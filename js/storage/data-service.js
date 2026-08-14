@@ -7,6 +7,10 @@ window.AppDataService = {
     return run;
   },
 
+  whenIdle() {
+    return this.enqueue(async () => undefined);
+  },
+
   createId(prefix) {
     const value = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
