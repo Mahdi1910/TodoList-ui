@@ -145,7 +145,7 @@ window.SubtaskEditorComponent = {
     this.selectedRepeat = null;
   },
 
-  submit() {
+  async submit() {
     const title = this.titleInput?.value.trim();
     if (!title) return this.titleInput?.reportValidity();
     const payload = {
@@ -158,12 +158,17 @@ window.SubtaskEditorComponent = {
       priority: this.selectedPriority,
       tags: [...this.selectedTags]
     };
-    const saved = this.editingSubtaskId
-      ? window.AppState.updateTask(this.editingSubtaskId, payload)
-      : window.AppState.addSubtask(this.parentTaskId, payload);
-    if (!saved) return;
-    this.close();
-    window.TasksComponent?.refreshAfterTaskMutation();
+    this.btnSubmit.disabled = true;
+    try {
+      if (this.editingSubtaskId) await window.AppDataService.updateTask(this.editingSubtaskId, payload);
+      else await window.AppDataService.createTask({ ...payload, parentTaskId: this.parentTaskId });
+      this.close();
+      window.TasksComponent?.refreshAfterTaskMutation();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save this subtask. Your form has been kept open.', error);
+    } finally {
+      this.btnSubmit.disabled = false;
+    }
   },
 
   openSchedule() {
