@@ -15,7 +15,7 @@ window.ScheduleComponent = {
   draftRepeat: { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } },
   onApplyCallback: null,
   lastFocusedElement: null,
-  preservedEditorFocusTarget: null,
+  afterCloseCallback: null,
 
   ITEM_HEIGHT: 40,
   VISIBLE_ITEMS: 5,
@@ -93,66 +93,12 @@ window.ScheduleComponent = {
 
     this.initWheels();
     this.bindEvents();
-    this.initPreservedFocusGuard();
-  },
-
-  resolvePreservedEditorFocusTarget(value) {
-    const allowedIds = new Set([
-      'task-title-input',
-      'task-desc-input',
-      'subtask-title-input',
-      'subtask-desc-input'
-    ]);
-    if (!value || !value.isConnected || !allowedIds.has(value.id)) return null;
-    if (typeof value.focus !== 'function' || value.hidden || value.closest?.('[hidden]')) return null;
-    return value;
-  },
-
-  clearPreservedFocusSession() {
-    [this.modalEl, this.customReminderModal, this.customRepeatModal, this.repeatEndModal]
-      .forEach(modal => window.ModalFocusManager?.clearPreservedFocus?.(modal));
-    this.preservedEditorFocusTarget = null;
-  },
-
-  getPreservedEditorFocusTarget() {
-    const target = this.resolvePreservedEditorFocusTarget(this.preservedEditorFocusTarget);
-    if (!target) {
-      if (this.preservedEditorFocusTarget) this.clearPreservedFocusSession();
-      return null;
-    }
-    if (document.activeElement !== target) {
-      this.clearPreservedFocusSession();
-      return null;
-    }
-    return target;
-  },
-
-  initPreservedFocusGuard() {
-    if (this._preservedFocusGuardBound) return;
-    this._preservedFocusGuardBound = true;
-    document.addEventListener('mousedown', event => {
-      const preserved = this.getPreservedEditorFocusTarget();
-      if (!preserved) return;
-
-      const surface = event.target.closest?.(
-        '#schedule-modal, #custom-reminder-modal, #custom-repeat-modal, #repeat-end-modal'
-      );
-      if (!surface?.classList.contains('active')) return;
-      if (event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-
-      const focusableControl = event.target.closest?.(
-        'button, [tabindex]:not([tabindex="-1"]), [role="button"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="tab"]'
-      );
-      if (focusableControl) event.preventDefault();
-    }, true);
   },
 
   open(initialDueDateStr = null, initialTimeStr = null, initialReminders = null, initialRepeat = null, onApply = null, focusPolicy = null) {
-    this.lastFocusedElement = document.activeElement;
-    const requestedPreservedFocus = this.resolvePreservedEditorFocusTarget(focusPolicy?.preserveEditorFocus || null);
-    this.preservedEditorFocusTarget = requestedPreservedFocus && document.activeElement === requestedPreservedFocus
-      ? requestedPreservedFocus
-      : null;
+    const returnFocusTarget = focusPolicy?.returnFocusTarget;
+    this.lastFocusedElement = returnFocusTarget?.isConnected ? returnFocusTarget : document.activeElement;
+    this.afterCloseCallback = typeof focusPolicy?.afterClose === 'function' ? focusPolicy.afterClose : null;
     this.draftDate = initialDueDateStr || null;
     this.onApplyCallback = onApply;
 
@@ -191,8 +137,7 @@ window.ScheduleComponent = {
       initialFocus: () => this.gridEl?.querySelector('.calendar-day.selected') ||
                           this.gridEl?.querySelector('.calendar-day.today') ||
                           this.btnQuickToday,
-      fallbackFocus: this.lastFocusedElement,
-      preserveFocus: this.getPreservedEditorFocusTarget()
+      fallbackFocus: this.lastFocusedElement
     });
   },
 
@@ -204,11 +149,13 @@ window.ScheduleComponent = {
       this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
     }
     this.closeReminderMenu();
-    window.ModalFocusManager.close(this.modalEl, {
+    const afterClose = this.afterCloseCallback;
+    this.afterCloseCallback = null;
+    const closed = window.ModalFocusManager.close(this.modalEl, {
       fallbackFocus: this.lastFocusedElement
     });
     this.lastFocusedElement = null;
-    this.clearPreservedFocusSession();
+    if (closed && typeof afterClose === 'function') afterClose();
   },
 
   apply() {
