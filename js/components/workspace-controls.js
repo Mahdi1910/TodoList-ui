@@ -247,13 +247,7 @@ window.WorkspaceControls = {
   },
 
   persistViewToCurrentEntity() {
-    if (window.AppState.currentFilterType === 'project') {
-      const project = window.AppState.getProject(window.AppState.currentFilter);
-      if (project) project.viewType = this.viewType;
-    } else if (window.AppState.currentFilterType === 'tag') {
-      const tag = window.AppState.getTag(window.AppState.currentFilter);
-      if (tag) tag.viewType = this.viewType;
-    }
+    return this.setViewType(this.viewType, { persist: true, render: false });
   },
 
   async toggleDirection() {
