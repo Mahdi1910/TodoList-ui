@@ -201,7 +201,7 @@ window.SubtaskEditorComponent = {
     if (!this.menuTags) return;
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
-      window.AppState.tags.filter(tag => (tag.parentId || null) === parentId).forEach(tag => {
+      window.TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
         const item = document.createElement('div');
         item.className = 'context-menu-item multiselect';
         item.dataset.subtaskTag = tag.id;
