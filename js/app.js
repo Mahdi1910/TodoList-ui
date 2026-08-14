@@ -22,8 +22,6 @@ const BOOTSTRAP_SCRIPTS = [
   'js/storage/mappers.js',
   'js/storage/persistence.js',
   'js/storage/data-service.js',
-  'js/storage/repeat-storage.js',
-  'js/storage/data-service-repeat.js',
   'js/storage/data-service-taxonomy.js',
   'js/storage/data-service-reminders.js',
   'js/storage/data-service-taxonomy-drag.js',
