@@ -183,7 +183,7 @@ window.TasksComponent = {
     this.btnDate.title = hasSchedule ? `Scheduled: ${datePart}${timePart}${repPart}` : 'Set Date';
   },
 
-  submitTask() {
+  async submitTask() {
     if (!this.titleInput?.value.trim()) return this.titleInput?.reportValidity();
     const payload = {
       title: this.titleInput.value.trim(),
@@ -196,10 +196,17 @@ window.TasksComponent = {
       priority: this.selectedPriority,
       tags: [...this.selectedTags]
     };
-    if (this.editingTaskId) window.AppState.updateTask(this.editingTaskId, payload);
-    else window.AppState.addTask({ ...payload, parentTaskId: null });
-    this.closeModal();
-    this.render();
+    this.submitTaskBtn.disabled = true;
+    try {
+      if (this.editingTaskId) await window.AppDataService.updateTask(this.editingTaskId, payload);
+      else await window.AppDataService.createTask({ ...payload, parentTaskId: null });
+      this.closeModal();
+      this.render();
+    } catch (error) {
+      window.AppPersistence.reportError('Could not save this task. Your form has been kept open.', error);
+    } finally {
+      this.submitTaskBtn.disabled = false;
+    }
   },
 
   resetSelections(useCurrentContext = false) {
