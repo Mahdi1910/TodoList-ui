@@ -97,8 +97,11 @@ window.ScheduleRepeatMethods = {
     });
 
     this.updateCustomRepeatSubviews(custom.unit);
-    this.customRepeatModal.classList.add('active');
-    this.customRepeatModal.setAttribute('aria-hidden', 'false');
+    window.ModalFocusManager.open(this.customRepeatModal, {
+      trigger: this.btnOpenCustomRepeat,
+      initialFocus: this.wheelRepeatInterval,
+      fallbackFocus: this.btnOpenCustomRepeat
+    });
   },
 
   closeCustomRepeatModal(commit = false) {
@@ -107,8 +110,9 @@ window.ScheduleRepeatMethods = {
       this.draftRepeat = JSON.parse(JSON.stringify(this.customRepeatSnapshot));
     }
     this.customRepeatSnapshot = null;
-    this.customRepeatModal.classList.remove('active');
-    this.customRepeatModal.setAttribute('aria-hidden', 'true');
+    window.ModalFocusManager.close(this.customRepeatModal, {
+      fallbackFocus: this.btnOpenCustomRepeat
+    });
     this.renderRepeatPresetList();
     this.updateRepeatSummary();
   },
