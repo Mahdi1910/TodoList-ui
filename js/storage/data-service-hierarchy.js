@@ -44,12 +44,10 @@ Object.assign(window.AppDataService, {
   },
 
   applyHierarchyMemory(copies, changedIds) {
-    changedIds.forEach(id => {
-      const live = window.AppState.getTask(id);
-      const copy = copies.get(id);
-      if (live && copy) Object.assign(live, copy, { tags: [...(copy.tags || [])] });
-    });
-    window.AppState.rebuildTaskOrder();
+    const changedTasks = [...changedIds]
+      .map(id => copies.get(id))
+      .filter(Boolean);
+    window.AppStateSync.replaceTasks(changedTasks);
   },
 
   async persistHierarchyCopies(copies, changedIds, extraWork = null, storeNames = []) {
@@ -231,7 +229,7 @@ Object.assign(window.AppDataService, {
       }, extraStores);
 
       this.applyHierarchyMemory(copies, changed);
-      window.AppState.settings.sortKey = 'custom';
+      window.AppStateSync.setSetting('sortKey', 'custom');
       return window.AppState.getTask(task.id);
     });
   }
