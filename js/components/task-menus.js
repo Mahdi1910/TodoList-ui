@@ -70,19 +70,43 @@ window.TaskMenuMethods = {
     this.bindTagMenuItems();
   },
 
+  getMenuInteractionFromClick(event) {
+    return event?.detail === 0 ? 'keyboard' : 'pointer';
+  },
+
+  getPointerPreservedEditorFocus(event) {
+    return this.getMenuInteractionFromClick(event) === 'pointer'
+      ? this.getActiveEditorInput?.() || null
+      : null;
+  },
+
+  bindContextMenuPointerGuard(menu) {
+    if (!menu || menu.dataset.pointerFocusGuard === 'true') return;
+    menu.dataset.pointerFocusGuard = 'true';
+    menu.addEventListener('mousedown', event => {
+      if (!event.target.closest('.context-menu-item')) return;
+      const preserved = this.getContextMenuPortalMap().get(menu)?.preserveEditorFocus || null;
+      if (preserved && document.activeElement === preserved) event.preventDefault();
+    });
+  },
+
   bindProjectMenuTrigger() {
     if (!this.btnProject || !this.menuProject) return;
     this.btnProject.setAttribute('aria-haspopup', 'listbox');
     this.btnProject.setAttribute('aria-expanded', 'false');
     this.menuProject.setAttribute('role', 'listbox');
+    this.bindContextMenuPointerGuard(this.menuProject);
     this.btnProject.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleContextMenu(this.menuProject, this.btnProject);
+      this.toggleContextMenu(this.menuProject, this.btnProject, {
+        interaction: this.getMenuInteractionFromClick(e),
+        preserveEditorFocus: this.getPointerPreservedEditorFocus(e)
+      });
     });
     this.btnProject.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this.openContextMenu(this.menuProject, this.btnProject);
+        this.openContextMenu(this.menuProject, this.btnProject, { interaction: 'keyboard' });
       }
     });
     this.menuProject.addEventListener('click', e => {
@@ -102,14 +126,18 @@ window.TaskMenuMethods = {
     this.btnTags.setAttribute('aria-haspopup', 'listbox');
     this.btnTags.setAttribute('aria-expanded', 'false');
     this.menuTags.setAttribute('role', 'listbox');
+    this.bindContextMenuPointerGuard(this.menuTags);
     this.btnTags.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleContextMenu(this.menuTags, this.btnTags);
+      this.toggleContextMenu(this.menuTags, this.btnTags, {
+        interaction: this.getMenuInteractionFromClick(e),
+        preserveEditorFocus: this.getPointerPreservedEditorFocus(e)
+      });
     });
     this.btnTags.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this.openContextMenu(this.menuTags, this.btnTags);
+        this.openContextMenu(this.menuTags, this.btnTags, { interaction: 'keyboard' });
       }
     });
   },
@@ -131,6 +159,7 @@ window.TaskMenuMethods = {
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
     menu.setAttribute('role', 'listbox');
+    this.bindContextMenuPointerGuard(menu);
     menu.querySelectorAll('.context-menu-item').forEach(item => {
       item.setAttribute('role', 'option');
       item.setAttribute('tabindex', '-1');
@@ -143,12 +172,15 @@ window.TaskMenuMethods = {
     });
     trigger.addEventListener('click', e => {
       e.stopPropagation();
-      this.toggleContextMenu(menu, trigger);
+      this.toggleContextMenu(menu, trigger, {
+        interaction: this.getMenuInteractionFromClick(e),
+        preserveEditorFocus: this.getPointerPreservedEditorFocus(e)
+      });
     });
     trigger.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this.openContextMenu(menu, trigger);
+        this.openContextMenu(menu, trigger, { interaction: 'keyboard' });
       }
     });
   },
@@ -193,9 +225,12 @@ window.TaskMenuMethods = {
     return this.getContextMenuPortalMap().get(menu)?.trigger || fallback || menu?.previousElementSibling || null;
   },
 
-  mountContextMenu(menu, trigger) {
+  mountContextMenu(menu, trigger, preserveEditorFocus = null) {
     const portals = this.getContextMenuPortalMap();
-    if (portals.has(menu)) return;
+    if (portals.has(menu)) {
+      portals.get(menu).preserveEditorFocus = preserveEditorFocus;
+      return;
+    }
     const placeholder = document.createComment(`context-menu:${menu.id || 'menu'}`);
     const parent = menu.parentNode;
     parent?.insertBefore(placeholder, menu);
@@ -203,7 +238,7 @@ window.TaskMenuMethods = {
     if (!host) return;
     host.appendChild(menu);
     menu.classList.add('context-menu-portal');
-    portals.set(menu, { placeholder, parent, trigger, host });
+    portals.set(menu, { placeholder, parent, trigger, host, preserveEditorFocus });
   },
 
   restoreContextMenu(menu) {
@@ -274,23 +309,26 @@ window.TaskMenuMethods = {
     });
   },
 
-  toggleContextMenu(menu, trigger) {
+  toggleContextMenu(menu, trigger, options = {}) {
     if (menu.classList.contains('open')) this.closeContextMenu(menu, trigger);
-    else this.openContextMenu(menu, trigger);
+    else this.openContextMenu(menu, trigger, options);
   },
 
-  openContextMenu(menu, trigger) {
+  openContextMenu(menu, trigger, { interaction = 'keyboard', preserveEditorFocus = null } = {}) {
     window.WorkspaceControls?.closeMenu();
     this.closeTaskActionMenu?.(false);
     this.closeAllContextMenus();
-    this.mountContextMenu(menu, trigger);
+    this.mountContextMenu(menu, trigger, preserveEditorFocus);
     menu.classList.add('open');
     trigger?.setAttribute('aria-expanded', 'true');
     this.ensureContextMenuViewportListeners();
     this.positionContextMenu(menu, trigger);
     requestAnimationFrame(() => this.positionContextMenu(menu, trigger));
-    const first = menu.querySelector('.context-menu-item.selected') || menu.querySelector('.context-menu-item');
-    first?.focus();
+
+    if (interaction === 'keyboard') {
+      const first = menu.querySelector('.context-menu-item.selected') || menu.querySelector('.context-menu-item');
+      first?.focus();
+    }
   },
 
   closeContextMenu(menu, trigger = this.getContextMenuTrigger(menu)) {
