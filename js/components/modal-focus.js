@@ -26,16 +26,7 @@ window.ModalFocusManager = (() => {
 
   function register(modal, fallbackFocus = null) {
     if (!modal) return null;
-    const record = records.get(modal) || {
-      modal,
-      returnFocus: null,
-      parentModal: null,
-      pendingFrame: null,
-      fallbackFocus: null,
-      preserveFocus: null,
-      preserveCancelled: false,
-      parentWasInerted: false
-    };
+    const record = records.get(modal) || { modal, returnFocus: null, parentModal: null, pendingFrame: null, fallbackFocus: null };
     if (fallbackFocus) record.fallbackFocus = fallbackFocus;
     records.set(modal, record);
     if (modal.getAttribute('aria-hidden') !== 'false' && !modal.classList.contains('active')) {
@@ -52,54 +43,26 @@ window.ModalFocusManager = (() => {
     if (record) record.pendingFrame = null;
   }
 
-  function clearPreservedFocus(modal) {
-    const record = records.get(modal);
-    if (!record?.preserveFocus) return;
-    record.preserveFocus = null;
-    record.preserveCancelled = true;
-  }
-
-  function open(modal, { trigger = null, initialFocus = null, fallbackFocus = null, preserveFocus = null } = {}) {
+  function open(modal, { trigger = null, initialFocus = null, fallbackFocus = null } = {}) {
     const record = register(modal, fallbackFocus);
     if (!record) return false;
     cancelFrame(record);
-
-    const preservedTarget = resolve(preserveFocus);
-    const canPreserve = Boolean(preservedTarget && document.activeElement === preservedTarget);
-    record.preserveFocus = canPreserve ? preservedTarget : null;
-    record.preserveCancelled = false;
-    record.returnFocus = record.preserveFocus || resolve(trigger) || resolve(document.activeElement);
+    record.returnFocus = resolve(trigger) || resolve(document.activeElement);
     record.parentModal = top() && top() !== modal ? top() : null;
-    record.parentWasInerted = false;
     if (fallbackFocus) record.fallbackFocus = fallbackFocus;
-
     const existing = stack.indexOf(modal);
     if (existing >= 0) stack.splice(existing, 1);
     stack.push(modal);
     setInert(modal, false);
     modal.setAttribute('aria-hidden', 'false');
     modal.classList.add('active');
-
     record.pendingFrame = requestAnimationFrame(() => {
       record.pendingFrame = null;
       if (top() !== modal || modal.inert || modal.getAttribute('aria-hidden') === 'true') return;
-
-      const stillPreserving = Boolean(
-        record.preserveFocus &&
-        resolve(record.preserveFocus) === record.preserveFocus &&
-        document.activeElement === record.preserveFocus
-      );
-
-      if (stillPreserving) return;
-
-      record.preserveFocus = null;
       const target = resolve(initialFocus);
       if (target && modal.contains(target)) target.focus();
       else focusable(modal)[0]?.focus();
-      if (record.parentModal) {
-        setInert(record.parentModal, true);
-        record.parentWasInerted = true;
-      }
+      if (record.parentModal) setInert(record.parentModal, true);
     });
     return true;
   }
@@ -108,51 +71,23 @@ window.ModalFocusManager = (() => {
     const record = records.get(modal) || register(modal, fallbackFocus);
     if (!record) return false;
     cancelFrame(record);
-
     const index = stack.lastIndexOf(modal);
     if (index >= 0) stack.splice(index, 1);
     modal.classList.remove('active');
-    if (record.parentModal && record.parentWasInerted) setInert(record.parentModal, false);
-
-    const preservedTarget = resolve(record.preserveFocus);
-    const activeBeforeClose = document.activeElement;
-    let target = null;
-
-    if (record.preserveCancelled) {
-      target = null;
-    } else if (preservedTarget) {
-      if (activeBeforeClose === preservedTarget) {
-        target = null;
-      } else if (modal.contains(activeBeforeClose)) {
-        target = preservedTarget;
-      }
-    } else {
-      target = resolve(record.returnFocus) || resolve(fallbackFocus) || resolve(record.fallbackFocus);
-      if (!target && record.parentModal?.classList.contains('active')) target = focusable(record.parentModal)[0] || null;
-      if (!target) target = resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
-    }
-
+    if (record.parentModal) setInert(record.parentModal, false);
+    let target = resolve(record.returnFocus) || resolve(fallbackFocus) || resolve(record.fallbackFocus);
+    if (!target && record.parentModal?.classList.contains('active')) target = focusable(record.parentModal)[0] || null;
+    if (!target) target = resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
     target?.focus();
-
     if (modal.contains(document.activeElement)) {
-      let emergency = preservedTarget;
-      if (record.preserveCancelled && record.parentModal?.classList.contains('active')) {
-        emergency = focusable(record.parentModal).find(element =>
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)
-        ) || null;
-      }
-      emergency ||= resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
+      const emergency = resolve('#btn-toggle-sidebar') || resolve('#btn-open-add-task');
       emergency?.focus();
     }
     if (modal.contains(document.activeElement)) return false;
-
     modal.setAttribute('aria-hidden', 'true');
     setInert(modal, true);
     record.returnFocus = null;
     record.parentModal = null;
-    record.preserveFocus = null;
-    record.preserveCancelled = false;
-    record.parentWasInerted = false;
     return true;
   }
 
@@ -183,5 +118,5 @@ window.ModalFocusManager = (() => {
     document.addEventListener('keydown', handleTab, true);
   }
 
-  return { init, register, open, close, clearPreservedFocus, getTopModal: top, setInert };
+  return { init, register, open, close, getTopModal: top, setInert };
 })();
