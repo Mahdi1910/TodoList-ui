@@ -1,4 +1,25 @@
 window.TaskOrderMethods = {
+  compareTaskOrder(a, b) {
+    return (a.sortOrder - b.sortOrder) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+  },
+
+  orderTasks(tasks = []) {
+    const source = [...tasks];
+    const roots = source.filter(task => !task.parentTaskId).sort(this.compareTaskOrder);
+    const children = new Map();
+    source.filter(task => task.parentTaskId).forEach(task => {
+      if (!children.has(task.parentTaskId)) children.set(task.parentTaskId, []);
+      children.get(task.parentTaskId).push(task);
+    });
+    children.forEach(items => items.sort(this.compareTaskOrder));
+
+    const ordered = [];
+    roots.forEach(root => ordered.push(root, ...(children.get(root.id) || [])));
+    const included = new Set(ordered.map(task => task.id));
+    source.filter(task => !included.has(task.id)).sort(this.compareTaskOrder).forEach(task => ordered.push(task));
+    return ordered;
+  },
+
   getRootTaskSlots() {
     const slots = [];
     this.tasks.forEach((task, index) => {
@@ -15,23 +36,11 @@ window.TaskOrderMethods = {
     const parentId = parentTaskId || null;
     return this.tasks
       .filter(task => (task.parentTaskId || null) === parentId)
-      .sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.createdAt).localeCompare(String(b.createdAt)));
+      .sort(this.compareTaskOrder);
   },
 
   getSiblingTaskIds(parentTaskId = null) {
     return this.getSiblingTasks(parentTaskId).map(task => task.id);
-  },
-
-  resequenceTaskScope(parentTaskId = null, orderedIds = []) {
-    const parentId = parentTaskId || null;
-    const uniqueIds = [...new Set(orderedIds)];
-    uniqueIds.forEach((id, sortOrder) => {
-      const task = this.getTask?.(id) || this.tasks.find(item => item.id === id);
-      if (!task || (task.parentTaskId || null) !== parentId) return;
-      task.sortOrder = sortOrder;
-    });
-    this.rebuildTaskOrder?.();
-    return uniqueIds;
   },
 
   getVisibleRootIds(tasks = []) {
@@ -45,51 +54,6 @@ window.TaskOrderMethods = {
 
   getRootOrderSnapshot() {
     return this.getRootTaskIds();
-  },
-
-  syncRootSortOrders() {
-    this.getRootTaskIds().forEach((id, sortOrder) => {
-      const task = this.getTask?.(id) || this.tasks.find(item => item.id === id);
-      if (task) task.sortOrder = sortOrder;
-    });
-  },
-
-  rebaseVisibleRootOrder(orderedVisibleIds = []) {
-    const uniqueIds = [...new Set(orderedVisibleIds)];
-    if (uniqueIds.length < 2) return false;
-    const idSet = new Set(uniqueIds);
-    const slots = [];
-    const byId = new Map();
-    this.tasks.forEach((task, index) => {
-      if (!task.parentTaskId && idSet.has(task.id)) {
-        slots.push(index);
-        byId.set(task.id, task);
-      }
-    });
-    const orderedTasks = uniqueIds.map(id => byId.get(id)).filter(Boolean);
-    if (orderedTasks.length !== slots.length) return false;
-    slots.forEach((slot, index) => {
-      this.tasks[slot] = orderedTasks[index];
-    });
-    this.syncRootSortOrders();
-    return true;
-  },
-
-  restoreRootOrderSnapshot(snapshot = []) {
-    return this.rebaseVisibleRootOrder(snapshot);
-  },
-
-  moveVisibleRootRelative(taskId, referenceId, placement = 'after', visibleIds = []) {
-    const ordered = [...new Set(visibleIds)].filter(id => id !== taskId);
-    if (!referenceId) {
-      ordered.push(taskId);
-      return this.rebaseVisibleRootOrder(ordered);
-    }
-    const referenceIndex = ordered.indexOf(referenceId);
-    if (referenceIndex === -1) return false;
-    const insertAt = placement === 'before' ? referenceIndex : referenceIndex + 1;
-    ordered.splice(insertAt, 0, taskId);
-    return this.rebaseVisibleRootOrder(ordered);
   }
 };
 
