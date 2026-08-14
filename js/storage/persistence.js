@@ -23,7 +23,7 @@ window.AppPersistence = (() => {
         ...item, parentId: item.parentId || null, sortOrder: index, createdAt: now, updatedAt: now
       }));
       const validTags = new Set(tags.map(item => item.id));
-      const tasks = (seed.tasks || []).map((item, index) => window.AppState.normalizeTask({
+      const tasks = (seed.tasks || []).map((item, index) => window.TaskModel.normalizeTask({
         ...item, sortOrder: index, createdAt: item.createdAt || now, updatedAt: now
       }));
 
@@ -175,14 +175,9 @@ window.AppPersistence = (() => {
       projects: [...data.projects].sort((a, b) => a.sortOrder - b.sortOrder),
       tags: [...data.tags].sort((a, b) => a.sortOrder - b.sortOrder),
       tasks,
+      reminderDefinitions: data.reminderDefinitions,
       settings
     });
-    window.AppState.normalizeTaskRelations?.();
-
-    if (window.ScheduleComponent) {
-      window.ScheduleComponent.customReminders = data.reminderDefinitions
-        .map(mapper().definitionToCustomReminder).filter(Boolean);
-    }
     return window.AppState;
   }
 
