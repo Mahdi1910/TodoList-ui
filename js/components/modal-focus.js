@@ -51,6 +51,11 @@ window.ModalFocusManager = (() => {
     if (record) record.pendingFrame = null;
   }
 
+  function clearPreservedFocus(modal) {
+    const record = records.get(modal);
+    if (record) record.preserveFocus = null;
+  }
+
   function open(modal, { trigger = null, initialFocus = null, fallbackFocus = null, preserveFocus = null } = {}) {
     const record = register(modal, fallbackFocus);
     if (!record) return false;
@@ -165,5 +170,5 @@ window.ModalFocusManager = (() => {
     document.addEventListener('keydown', handleTab, true);
   }
 
-  return { init, register, open, close, getTopModal: top, setInert };
+  return { init, register, open, close, clearPreservedFocus, getTopModal: top, setInert };
 })();
