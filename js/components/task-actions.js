@@ -1,7 +1,6 @@
 window.TaskActionMethods = {
   initTaskActions() {
     this.taskActionMenu = document.getElementById('task-action-menu');
-    this.ensureTaskHierarchyActionButtons();
     this.taskActionAddBtn = this.taskActionMenu?.querySelector('[data-task-action="add-subtask"]');
     this.taskActionLinkBtn = this.taskActionMenu?.querySelector('[data-task-action="link-parent"]');
     this.taskActionUnlinkBtn = this.taskActionMenu?.querySelector('[data-task-action="unlink"]');
@@ -47,26 +46,6 @@ window.TaskActionMethods = {
       }
       this.closeTaskActionMenu(true);
     });
-  },
-
-  ensureTaskHierarchyActionButtons() {
-    if (!this.taskActionMenu) return;
-    const deleteBtn = this.taskActionMenu.querySelector('[data-task-action="delete"]');
-    const createButton = (action, label) => {
-      if (this.taskActionMenu.querySelector(`[data-task-action="${action}"]`)) return;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.taskAction = action;
-      button.setAttribute('role', 'menuitem');
-      button.textContent = label;
-      if (action === 'link-parent') {
-        button.setAttribute('aria-haspopup', 'menu');
-        button.setAttribute('aria-expanded', 'false');
-      }
-      this.taskActionMenu.insertBefore(button, deleteBtn || null);
-    };
-    createButton('link-parent', 'Link to Parent');
-    createButton('unlink', 'Unlink');
   },
 
   createTaskParentPicker() {
