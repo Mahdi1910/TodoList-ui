@@ -172,30 +172,6 @@
         </div>
       </header>
 
-      <div id="workspace-sort-group-panel" class="workspace-settings-panel" role="dialog" aria-label="Sort and group settings" aria-hidden="true">
-        <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
-          <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
-          <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
-            <button type="button" class="workspace-option-chip" data-sort-key="custom" role="radio" aria-checked="false">Custom</button>
-            <button type="button" class="workspace-option-chip" data-sort-key="dueDate" role="radio" aria-checked="false">Due Date</button>
-            <button type="button" class="workspace-option-chip" data-sort-key="priority" role="radio" aria-checked="false">Priority</button>
-            <button type="button" class="workspace-option-chip" data-sort-key="name" role="radio" aria-checked="false">Name</button>
-            <button type="button" class="workspace-option-chip" data-sort-key="createdAt" role="radio" aria-checked="false">Created Date</button>
-          </div>
-        </section>
-        <div class="workspace-settings-divider"></div>
-        <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
-          <div class="workspace-settings-label" id="workspace-group-label">Group</div>
-          <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
-            <button type="button" class="workspace-option-chip" data-group-key="none" role="radio" aria-checked="false">None</button>
-            <button type="button" class="workspace-option-chip" data-group-key="priority" role="radio" aria-checked="false">Priority</button>
-            <button type="button" class="workspace-option-chip" data-group-key="date" role="radio" aria-checked="false">Date</button>
-            <button type="button" class="workspace-option-chip" data-group-key="project" role="radio" aria-checked="false">Project</button>
-            <button type="button" class="workspace-option-chip" data-group-key="tag" role="radio" aria-checked="false">Tag</button>
-          </div>
-        </section>
-      </div>
-
       <!-- Task Containers Workspace -->
       <div class="workspace-content">
         <div class="list-view" id="list-view">
@@ -287,6 +263,30 @@
         Settings
       </button>
     </nav>
+  </div>
+
+  <div id="workspace-sort-group-panel" class="workspace-settings-panel" role="dialog" aria-label="Sort and group settings" aria-hidden="true">
+    <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
+      <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
+      <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
+        <button type="button" class="workspace-option-chip" data-sort-key="custom" role="radio" aria-checked="false">Custom</button>
+        <button type="button" class="workspace-option-chip" data-sort-key="dueDate" role="radio" aria-checked="false">Due Date</button>
+        <button type="button" class="workspace-option-chip" data-sort-key="priority" role="radio" aria-checked="false">Priority</button>
+        <button type="button" class="workspace-option-chip" data-sort-key="name" role="radio" aria-checked="false">Name</button>
+        <button type="button" class="workspace-option-chip" data-sort-key="createdAt" role="radio" aria-checked="false">Created Date</button>
+      </div>
+    </section>
+    <div class="workspace-settings-divider"></div>
+    <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
+      <div class="workspace-settings-label" id="workspace-group-label">Group</div>
+      <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
+        <button type="button" class="workspace-option-chip" data-group-key="none" role="radio" aria-checked="false">None</button>
+        <button type="button" class="workspace-option-chip" data-group-key="priority" role="radio" aria-checked="false">Priority</button>
+        <button type="button" class="workspace-option-chip" data-group-key="date" role="radio" aria-checked="false">Date</button>
+        <button type="button" class="workspace-option-chip" data-group-key="project" role="radio" aria-checked="false">Project</button>
+        <button type="button" class="workspace-option-chip" data-group-key="tag" role="radio" aria-checked="false">Tag</button>
+      </div>
+    </section>
   </div>
 
   <div class="task-action-menu" id="task-action-menu" role="menu" aria-label="Task actions" hidden>
