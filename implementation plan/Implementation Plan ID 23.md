@@ -2,39 +2,37 @@
 
 ## Purpose
 
-Correct the meaning of **Sort → Custom** and make manual drag consistent with that meaning.
+Correct the meaning of **Sort → Custom** and make manual drag use the same rule.
 
-Custom must never mean “restore an old historical manual order.” Instead:
+Custom must never mean “restore an old historical manual order.”
 
-- When the user explicitly switches from Name / Due Date / Priority / Created Date into **Custom**, the order produced by the current sort becomes the new persisted Custom baseline.
-- When the user manually drags a Task/Subtask while a non-Custom sort is active, the app must automatically switch to **Custom** and persist the current sorted baseline **with the user’s drag applied**.
-- Canceling a drag must not switch to Custom or persist anything.
-- Once Custom is active, later manual drags continue to update the saved Custom order normally.
+Required behavior:
+
+- When the user switches from Name / Due Date / Priority / Created Date to **Custom**, the currently sorted order becomes the new saved Custom order.
+- When the user manually reorders a Task/Subtask while a non-Custom sort is active, the app automatically changes to **Custom** and saves the current sorted order **plus the drag change**.
+- A canceled/no-op drag does not change the sort mode or saved order.
+- Once Custom is active, later drags continue updating the saved manual order normally.
 
 Example:
 
 ```text
-old Custom: C, A, B
+Old Custom: C, A, B
 Name:       A, B, C
-select Custom
-result:     A, B, C
-
-drag B below C
-result:     A, C, B  (saved Custom)
+Select Custom
+Result:     A, B, C
 ```
 
 Direct-drag example:
 
 ```text
-old Custom: C, A, B
+Old Custom: C, A, B
 Name:       A, B, C
-
-drag A below C without first selecting Custom
-result:     B, C, A
-sort mode:  Custom
+Drag A below C
+Result:     B, C, A
+Sort:       Custom
 ```
 
-The old `C, A, B` order must not reappear.
+The old `C, A, B` order must not return.
 
 ---
 
@@ -45,110 +43,84 @@ This is a focused sorting/order repair after ID20 Part 3. Do not start Part 4 an
 Expected files:
 
 - `js/components/workspace-controls.js`
-- `js/components/task-drag.js`
 - `js/components/task-drag-commit.js`
 - `js/storage/data-service-drag.js`
 - `js/storage/data-service-hierarchy.js`
 
-No changes should be required to:
+Do not modify:
 
 - Task/Subtask editor focus behavior
-- Schedule/Date keyboard behavior
-- context-menu clipping/focus repair
+- Date/Schedule keyboard behavior
+- context-menu clipping/focus behavior
 - Repeat engine
 - reminder architecture
 - IndexedDB schema
 - Backup format
 
-The existing `task.sortOrder` field remains the persisted Custom-order representation.
+Existing `task.sortOrder` remains the persisted Custom-order representation.
 
 ---
 
-# Current Root Cause
+# Root Cause
 
-`WorkspaceControls.sortTasks()` calculates Name / Due Date / Priority / Created Date order only at render time.
+Normal sorts are calculated at render time by `WorkspaceControls.sortTasks()`.
 
-The persisted `sortOrder` values still contain the previous manual Custom arrangement.
-
-Currently, selecting Custom only saves:
+The durable `sortOrder` values still contain the old manual Custom arrangement. Previously, selecting Custom only persisted:
 
 ```text
 sortKey = custom
 ```
 
-so the renderer falls back to the older persisted `sortOrder` and tasks jump back.
+Therefore the renderer returned to the old `sortOrder` values.
 
-The drag path has the same architectural problem. A drag while Name/Priority/etc. is active eventually saves `sortKey = custom`, but the hierarchy service starts from the old AppState/custom sibling order instead of the currently active sorted baseline. Some drops can therefore mix the new drag with pieces of the old Custom order.
+The drag path had the same problem: it changed the mode to Custom after a drop, but hierarchy ordering was based on the old AppState/custom sibling order rather than the order currently produced by Name/Priority/etc.
 
 ---
 
-# Required Semantics
+# Required Rules
 
-## 1. Explicit switch into Custom
-
-For every non-Custom sort:
+## Rule 1 — Explicit non-Custom → Custom
 
 - Name → Custom keeps Name order.
 - Due Date → Custom keeps Due Date order.
 - Priority → Custom keeps Priority order.
 - Created Date → Custom keeps Created Date order.
-- Ascending/descending direction must be respected.
+- Ascending/descending direction is respected.
 
-The current sorted order becomes the new persisted `sortOrder` baseline.
+## Rule 2 — Normal sort → normal sort
 
-## 2. Switching between normal sorts
+Changing Name → Priority, Priority → Due Date, etc. does not rewrite `sortOrder`.
 
-Name → Priority, Priority → Due Date, etc. must **not** rewrite `sortOrder`.
+The baseline is rewritten only when entering Custom or when a successful drag forces the app into Custom.
 
-Only entering Custom captures a new manual baseline.
+## Rule 3 — Custom → Custom
 
-## 3. Selecting Custom while already Custom
+No order rewrite is required.
 
-No order rewrite is needed.
+## Rule 4 — Drag while Custom is already active
 
-## 4. Drag while already Custom
+Keep the existing hierarchy/order persistence behavior.
 
-Keep current drag behavior: the successful drag updates the saved manual order.
+## Rule 5 — Drag while a normal sort is active
 
-## 5. Drag while a non-Custom sort is active
+The drag session already records `startSortKey`.
 
-This is mandatory.
+For a real drop:
 
-At drag start:
+1. Verify the active sort has not changed during the drag.
+2. While that non-Custom sorter is still active, build the complete data-driven sibling-order snapshot.
+3. Pass that snapshot into the existing hierarchy drag command.
+4. Apply the sorted baseline to Task copies first.
+5. Apply the actual before/after/hierarchy/group drop on top of that baseline.
+6. Persist all order/hierarchy changes and `sortKey = custom` atomically.
+7. Update AppState through `AppStateSync` only after transaction success.
+8. Set the Workspace UI to Custom after success.
 
-1. Record the active sort key/direction.
-2. Build an in-memory snapshot of the current sorted Task/Subtask sibling scopes.
-3. Do **not** persist anything yet.
+Canceled/no-op drags return before step 2, so they do not persist or switch sort modes.
 
-If the drag is canceled or returns to its original position:
+## Rule 6 — Root Tasks and Subtasks
 
-- discard the snapshot;
-- keep the original non-Custom sort;
-- do not change `sortOrder`.
-
-If the drag succeeds:
-
-1. Use the captured sorted snapshot as the baseline.
-2. Apply the actual hierarchy/order drop to that baseline.
-3. Persist all affected `sortOrder` values plus `sortKey = custom` atomically.
-4. Synchronize AppState through `AppStateSync` only after the transaction succeeds.
-5. Set `WorkspaceControls.sortKey = custom` only after success.
-
-Example:
-
-```text
-old Custom: C, A, B
-Name view:  A, B, C
-
-drag A to bottom
-
-correct new Custom: B, C, A
-incorrect result:   C, A, B or C, B, A
-```
-
-## 6. Root Tasks and Subtasks
-
-Capture independent sibling scopes:
+The snapshot contains independent sibling scopes:
 
 ```text
 root scope
@@ -157,28 +129,21 @@ parent B subtask scope
 ...
 ```
 
-Each scope receives its own sequential `sortOrder` values.
+Each scope gets its own sequential `sortOrder` values.
 
-## 7. Use data, not DOM, for the baseline
+## Rule 7 — Baseline comes from data, not DOM
 
-The persistent baseline must be produced from Task data using the existing `WorkspaceControls.sortTasks()` comparator.
+Use `WorkspaceControls.sortTasks()` over AppState sibling data.
 
-Do not reconstruct the global Custom baseline from rendered DOM because:
+Do not derive the complete persistent baseline from rendered DOM because filters, List/Kanban, grouping, and duplicate Tag-group appearances make DOM order incomplete or ambiguous.
 
-- filters hide Tasks;
-- List and Kanban have different DOM structures;
-- Group By creates separate containers;
-- Tag grouping can render one Task more than once.
-
-The drag system may continue using DOM geometry to determine the user’s actual drop neighbors (`beforeTaskId` / `afterTaskId`). The **baseline order** itself must remain data-driven.
+The drag UI may still use DOM geometry to identify the actual drop neighbors (`beforeTaskId` / `afterTaskId`).
 
 ---
 
-# Implementation Design
+# Implementation
 
-## Step 1 — `WorkspaceControls.buildCustomOrderSnapshot()`
-
-Add a read-only helper that runs while the current non-Custom sort is still active.
+## 1. `WorkspaceControls.buildCustomOrderSnapshot()`
 
 Build:
 
@@ -190,140 +155,111 @@ Build:
 ]
 ```
 
-For roots:
+Root scope:
 
 ```text
 sortTasks(AppState.getRootTasks())
 ```
 
-For every root with Subtasks:
+Every Subtask scope:
 
 ```text
-sortTasks(AppState.getSubtasks(root.id))
+sortTasks(AppState.getSubtasks(parent.id))
 ```
 
-Use all Tasks in every sibling scope, not only the currently filtered/visible Tasks.
+Use all Tasks in each scope, not only the current filter.
 
-The snapshot contains IDs only.
+## 2. Explicit Custom selection
 
-## Step 2 — Explicit Custom selection
+In `handleSettingsPanelClick()`:
 
-In `WorkspaceControls.handleSettingsPanelClick()`:
+If selected sort is Custom and current sort is not Custom:
 
-When selected value is `custom` and current `sortKey !== custom`:
-
-1. Build the snapshot **before** changing `this.sortKey`.
-2. Call `await AppDataService.activateCustomSort(snapshot)`.
-3. After success, set `this.sortKey = 'custom'`.
+1. Build snapshot before changing `this.sortKey`.
+2. `await AppDataService.activateCustomSort(snapshot)`.
+3. On success set `this.sortKey = 'custom'`.
 4. Sync UI and render.
 
-Normal sort selections keep using `setSetting('sortKey', value)` and do not touch task order.
+Normal sort selections keep using `setSetting('sortKey', value)`.
 
-If persistence fails, remain in the previous sort mode.
+## 3. Shared snapshot validation/application
 
-## Step 3 — Shared AppDataService snapshot validation/order helper
+The data service must validate:
 
-Extend the order/drag service layer with pure helpers that:
+- one root scope;
+- every existing Subtask sibling scope;
+- no duplicate scopes;
+- no duplicate Task IDs;
+- every Task ID exists;
+- every Task belongs to the declared parent scope;
+- every sibling scope is complete;
+- the entire hierarchy is represented.
 
-- validate snapshot structure;
-- require exactly one root scope;
-- require every existing Subtask sibling scope;
-- reject duplicate IDs/scopes;
-- verify every ID exists;
-- verify each Task belongs to the declared `parentTaskId` scope;
-- verify the snapshot covers the complete current hierarchy;
-- apply sequential `sortOrder` values to task copies.
+Then assign sequential `sortOrder` values to Task copies.
 
-These helpers must not touch DOM.
+## 4. `activateCustomSort(snapshot)`
 
-## Step 4 — `AppDataService.activateCustomSort(snapshot)`
+One transaction writes:
 
-The explicit Custom command must:
+- changed Task `sortOrder` rows;
+- `APP_SETTINGS.sortKey = custom`.
 
-1. validate/apply the snapshot to Task copies;
-2. write changed Task rows and `APP_SETTINGS.sortKey = custom` in one IndexedDB transaction;
-3. on success call `AppStateSync.replaceTasks(...)`;
-4. call `AppStateSync.setSetting('sortKey', 'custom')`;
-5. return without changing any Task field except `sortOrder`.
+After success:
 
-Do not change `updatedAt` merely for order capture unless existing order persistence requires it.
+- `AppStateSync.replaceTasks(...)`;
+- `AppStateSync.setSetting('sortKey', 'custom')`.
 
-## Step 5 — Capture baseline when drag starts under a normal sort
+No other Task field changes.
 
-In `TaskDragMethods.beginTaskDragSession()`:
+## 5. Integrate baseline into the existing hierarchy writer
 
-- store the normalized `startSortKey`;
-- if `startSortKey !== 'custom'`, call `WorkspaceControls.buildCustomOrderSnapshot()` and store it on the drag session;
-- do not persist it yet.
+Do **not** create a second hierarchy mutation path.
 
-This must happen before any successful drop changes the sort mode.
+Extend the existing `AppDataService.commitHierarchyDrag()` with optional `customOrderSnapshot`.
 
-## Step 6 — Pass the baseline only on successful drag commit
+When supplied:
 
-`TaskDragCommitMethods.commitTaskDrag()` passes the captured snapshot to:
+- apply snapshot to copies;
+- derive source/target sibling IDs from snapshot order rather than old custom AppState order;
+- run the existing hierarchy/group metadata logic;
+- persist through the existing single transaction.
 
-```text
-AppDataService.commitHierarchyDrag(...)
-```
+When absent, preserve existing Custom drag behavior.
 
-only when the drag started from a non-Custom sort.
+## 6. Drag commit UI
 
-Canceled/no-op drag paths never call persistence and therefore never switch to Custom.
+`TaskDragCommitMethods.commitTaskDrag()`:
 
-## Step 7 — Apply hierarchy drag on top of the captured baseline
-
-Extend `AppDataService.commitHierarchyDrag()` with an optional `customOrderSnapshot`.
-
-When present:
-
-1. Create normal task copies.
-2. Apply the captured sorted `sortOrder` baseline to those copies first.
-3. Derive source/target sibling arrays from that baseline, not from the old AppState custom order.
-4. Apply the user’s `beforeTaskId` / `afterTaskId`, hierarchy level, parent change, and grouped metadata change exactly as the current drag logic does.
-5. Persist the baseline order changes, hierarchy/drop changes, and `sortKey = custom` in the same transaction.
-6. Update AppState only after success.
-
-When no snapshot is supplied (drag already started in Custom), preserve existing behavior.
-
-This is the critical rule that makes:
-
-```text
-Name order + drag delta = new Custom order
-```
-
-instead of:
-
-```text
-old Custom order + drag delta
-```
+- no-op/canceled drag: return without switching sort;
+- drag started from Custom: normal `commitHierarchyDrag()`;
+- drag started from non-Custom: verify sort is unchanged, build snapshot, pass it to `commitHierarchyDrag()`;
+- after successful commit set Workspace sort UI to Custom.
 
 ---
 
-# Grouping / Filtering Rules
+# Grouping / Filtering
 
 ## Filters
 
-The captured baseline uses all Tasks in each sibling scope, even if the current filter hides some of them.
-
-The drop still uses the visible neighbors selected by the drag UI. Hidden Tasks keep their deterministic position from the active comparator.
+Snapshot all Tasks in each sibling scope. Hidden Tasks retain deterministic positions from the active comparator.
 
 ## Group By
 
-The baseline remains global/data-driven. Group containers only determine where the user dropped.
+Grouping controls where the user drops; it does not define the global baseline.
 
-If a grouped drag changes Priority/Date/Project/Tag metadata, keep the existing metadata behavior. The successful operation still switches to Custom.
+Existing Priority/Date/Project/Tag metadata changes from cross-group drag must remain unchanged.
 
-## Tag grouping duplicates
+## Tag grouping
 
-Do not use DOM order as the baseline because one Task may appear in several tag groups.
+A Task can appear in multiple Tag groups, so DOM cannot be the durable baseline.
 
 ## Completed Tasks
 
-Active/completed rendering may be separate, but one sibling `sortOrder` namespace remains sufficient. Sorting the full sibling scope preserves the comparator-relative order inside each rendered partition.
+Active/completed sections still share the same sibling `sortOrder` namespace. Sorting the complete scope preserves relative comparator order inside each partition.
 
 ---
 
-# Part 3 Architecture Rules
+# Part 3 Architecture Requirement
 
 Do not reintroduce direct state mutation such as:
 
@@ -335,14 +271,12 @@ AppState.rebuildTaskOrder()
 Required path:
 
 ```text
-Workspace/Drag UI
+Workspace / Drag UI
   → AppDataService
   → IndexedDB transaction
   → AppStateSync
   → render
 ```
-
-No UI component should write durable `sortOrder` directly.
 
 ---
 
@@ -350,17 +284,16 @@ No UI component should write durable `sortOrder` directly.
 
 Before merge confirm:
 
-- Explicit non-Custom → Custom builds snapshot before changing `sortKey`.
+- Explicit non-Custom → Custom captures before changing `sortKey`.
 - Normal sort → normal sort does not rewrite `sortOrder`.
-- Non-Custom drag stores a baseline snapshot without persisting at drag start.
-- Canceled/no-op drag keeps the original sort mode.
-- Successful non-Custom drag passes the snapshot into the hierarchy service.
-- Hierarchy service derives sibling order from the snapshot when supplied.
-- Task order + hierarchy/drop + `sortKey=custom` are atomic.
-- Custom-started drags still work without a snapshot.
-- No direct AppState write APIs are reintroduced.
-- No DOM traversal is used to create the persistent global baseline.
-- No Repeat/reminder/schedule/focus files are modified.
+- No-op/canceled drag keeps the current normal sort.
+- Successful normal-sort drag passes a complete snapshot into the existing hierarchy writer.
+- The existing hierarchy writer has only one mutation implementation.
+- Baseline + drop/hierarchy/group metadata + `sortKey=custom` are atomic.
+- Custom-started drags preserve existing behavior.
+- No direct AppState mutation is introduced.
+- No DOM traversal creates the global baseline.
+- No Schedule/Repeat/reminder/focus/context-menu files are touched.
 
 ---
 
@@ -371,8 +304,8 @@ Before merge confirm:
 1. Old Custom: `C, A, B`.
 2. Name ascending → `A, B, C`.
 3. Select Custom.
-4. Must stay `A, B, C`.
-5. Refresh; must stay `A, B, C`.
+4. Must remain `A, B, C`.
+5. Refresh: must remain `A, B, C`.
 
 Repeat with Name descending, Due Date, Priority, Created Date.
 
@@ -382,49 +315,40 @@ Repeat with Name descending, Due Date, Priority, Created Date.
 2. Name ascending → `A, B, C`.
 3. Without selecting Custom, drag `A` below `C`.
 4. Must become `B, C, A`.
-5. Sort indicator must now say Custom.
-6. Refresh; must remain `B, C, A`.
+5. Sort indicator must become Custom.
+6. Refresh: must remain `B, C, A`.
 
-## Direct drag from other sorts
+## Other normal sorts
 
-Repeat drag tests while sorted by:
+Repeat direct drag under:
 
 - Name ascending/descending
 - Due Date
 - Priority
 - Created Date
 
-The displayed sorted order plus the user’s drag must become the new Custom order.
-
 ## Cancel/no-op drag
 
-1. Select Name.
-2. Start dragging but cancel, or return to the original slot.
-3. Must remain Name.
-4. No Custom-order rewrite should occur.
+Start from Name, begin dragging, then cancel or return to the original slot. Sort must remain Name and saved Custom order must not be rewritten.
 
-## Subtasks
+## Subtasks / hierarchy
 
-Repeat explicit Custom and direct-drag transitions for multiple Subtasks under one parent.
+Test:
 
-## Hierarchy changes
-
-While a non-Custom sort is active, test:
-
+- Subtask reorder under a normal sort;
 - root reorder;
-- Subtask reorder;
 - root → Subtask where allowed;
 - Subtask → root;
-- Subtask moved between parents where supported.
+- Subtask between parents where supported.
 
-After each successful drag, Custom must reflect the previously sorted baseline plus the hierarchy/drop change.
+A successful drop must become Custom and preserve the previous sorted baseline plus the drag.
 
 ## Grouped views
 
-Test at least Priority and Project grouping. Drag inside a group and between groups. Confirm metadata updates still work and the sort becomes Custom without restoring old manual order.
+Test Priority and Project grouping, including cross-group drops. Existing metadata behavior must remain correct while Custom adopts the new order.
 
 ---
 
 # Completion Rule
 
-Do not mark this repair manually verified until the user confirms real-device behavior after refresh. Static review alone is not enough.
+Do not mark this repair manually verified until real-device testing succeeds after refresh.
