@@ -9,27 +9,8 @@ window.SidebarComponent = {
     this.backdropEl = document.getElementById('sidebar-backdrop');
     this.toggleBtn = document.getElementById('btn-toggle-sidebar');
     this.viewTitleEl = document.getElementById('current-view-title');
-    this.projectListEl = document.getElementById('project-list');
-    this.projectModal = document.getElementById('project-modal');
-    this.projectForm = document.getElementById('project-form');
-    this.projectNameInput = document.getElementById('project-name-input');
-    this.projectIconTrigger = document.getElementById('project-icon-trigger');
-    this.projectIconPicker = document.getElementById('project-icon-picker');
-    this.projectParentSelect = document.getElementById('project-parent-select');
-    this.projectModalTitle = document.getElementById('project-modal-title');
-    this.projectSaveBtn = document.getElementById('btn-save-project');
-    this.tagListEl = document.getElementById('tag-list');
-    this.tagModal = document.getElementById('tag-modal');
-    this.tagForm = document.getElementById('tag-form');
-    this.tagNameInput = document.getElementById('tag-name-input');
-    this.tagIconTrigger = document.getElementById('tag-icon-trigger');
-    this.tagIconPicker = document.getElementById('tag-icon-picker');
-    this.tagParentSelect = document.getElementById('tag-parent-select');
-    this.tagModalTitle = document.getElementById('tag-modal-title');
-    this.tagSaveBtn = document.getElementById('btn-save-tag');
-    this.selectedProjectIcon = '●';
-    this.selectedProjectView = 'list';
-    this.editingProjectId = null;
+    this.taxonomyConfigs = [window.SidebarProjectConfig, window.SidebarTagConfig].filter(Boolean);
+    this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.initialize(this, config));
     this.bindEvents();
     this.renderProjects();
     this.renderTags();
@@ -41,93 +22,17 @@ window.SidebarComponent = {
     this.backdropEl?.addEventListener('click', () => this.closeSidebar());
 
     document.querySelectorAll('.sidebar-nav-item').forEach(item => {
-      item.addEventListener('click', e => this.selectFilter(e.currentTarget));
+      item.addEventListener('click', event => this.selectFilter(event.currentTarget));
     });
-    document.getElementById('btn-add-project')?.addEventListener('click', () => this.openProjectModal());
-    document.getElementById('btn-add-tag')?.addEventListener('click', () => this.openTagModal());
-    document.getElementById('btn-close-project-modal')?.addEventListener('click', () => this.closeProjectModal());
-    document.getElementById('btn-close-tag-modal')?.addEventListener('click', () => this.closeTagModal());
-    this.tagModal?.addEventListener('click', e => {
-      if (e.target === this.tagModal) this.closeTagModal();
-    });
-    this.tagForm?.addEventListener('submit', e => {
-      e.preventDefault();
-      this.saveTag();
-    });
-    this.tagIconTrigger?.addEventListener('click', e => {
-      e.stopPropagation();
-      this.tagIconPicker?.classList.toggle('open');
-      this.tagIconTrigger?.setAttribute('aria-expanded', this.tagIconPicker?.classList.contains('open') ? 'true' : 'false');
-    });
-    this.tagIconPicker?.querySelectorAll('[data-icon]').forEach(button => {
-      button.addEventListener('click', () => this.selectTagIcon(button.dataset.icon));
-    });
-    this.projectModal?.addEventListener('click', e => {
-      if (e.target === this.projectModal) this.closeProjectModal();
-    });
-    this.projectForm?.addEventListener('submit', e => {
-      e.preventDefault();
-      this.saveProject();
-    });
-    this.projectIconTrigger?.addEventListener('click', e => {
-      e.stopPropagation();
-      this.projectIconPicker?.classList.toggle('open');
-      this.projectIconTrigger?.setAttribute('aria-expanded', this.projectIconPicker?.classList.contains('open') ? 'true' : 'false');
-    });
-    this.projectIconPicker?.querySelectorAll('[data-icon]').forEach(button => {
-      button.addEventListener('click', () => this.selectProjectIcon(button.dataset.icon));
-    });
-    this.projectModal?.addEventListener('keydown', e => {
-      if (e.key === 'Escape') this.closeProjectModal();
-    });
-    this.tagModal?.addEventListener('keydown', e => {
-      if (e.key === 'Escape') this.closeTagModal();
-    });
+
+    this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.bindEvents(this, config));
+
     document.addEventListener('click', () => {
-      this.projectIconPicker?.classList.remove('open');
-      this.tagIconPicker?.classList.remove('open');
+      this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.closeIconPicker(this, config));
       this.closeSidebarActionMenus();
     });
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') this.closeSidebarActionMenus();
-    });
-    this.tagListEl?.addEventListener('click', e => {
-      const addChild = e.target.closest('[data-tag-add-child]');
-      const edit = e.target.closest('[data-tag-edit]');
-      const remove = e.target.closest('[data-tag-delete]');
-      const item = e.target.closest('[data-tag-id]');
-      if (addChild) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.openTagModal(null, addChild.dataset.tagAddChild);
-      } else if (edit) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.openTagModal(edit.dataset.tagEdit);
-      } else if (remove) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.deleteTag(remove.dataset.tagDelete);
-      } else if (item) this.selectFilter(item);
-    });
-    this.projectListEl?.addEventListener('click', e => {
-      const addChild = e.target.closest('[data-project-add-child]');
-      const edit = e.target.closest('[data-project-edit]');
-      const remove = e.target.closest('[data-project-delete]');
-      const item = e.target.closest('[data-project-id]');
-      if (addChild) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.openProjectModal(null, addChild.dataset.projectAddChild);
-      } else if (edit) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.openProjectModal(edit.dataset.projectEdit);
-      } else if (remove) {
-        e.stopPropagation();
-        this.closeSidebarActionMenus();
-        this.deleteProject(remove.dataset.projectDelete);
-      } else if (item) this.selectFilter(item);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') this.closeSidebarActionMenus();
     });
   },
 
@@ -176,8 +81,10 @@ window.SidebarComponent = {
   },
 
   closeSidebarActionMenus() {
-    this.projectListEl?.querySelectorAll('.project-more-menu.open').forEach(menu => menu.classList.remove('open'));
-    this.tagListEl?.querySelectorAll('.tag-more-menu.open').forEach(menu => menu.classList.remove('open'));
+    this.taxonomyConfigs.forEach(config => {
+      this[`${config.entityType}ListEl`]?.querySelectorAll(`.${config.entityType}-more-menu.open`)
+        .forEach(menu => menu.classList.remove('open'));
+    });
   },
 
   toggleSidebarActionMenu(menu) {
@@ -215,21 +122,22 @@ window.SidebarComponent = {
 
   updateCounts() {
     const set = (id, value) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = value;
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
     };
     set('count-inbox', window.AppState.countInbox());
     set('count-today', window.AppState.countToday());
     set('count-completed', window.AppState.countCompleted());
-    this.projectListEl?.querySelectorAll('[data-project-id]').forEach(item => {
-      const count = item.querySelector('.item-count');
-      if (count) count.textContent = window.AppState.countProject(item.dataset.projectId);
-    });
-    this.tagListEl?.querySelectorAll('[data-tag-id]').forEach(item => {
-      const count = item.querySelector('.item-count');
-      if (count) count.textContent = window.AppState.countTag(item.dataset.tagId);
+
+    this.taxonomyConfigs.forEach(config => {
+      const list = this[`${config.entityType}ListEl`];
+      const countMethod = `count${config.stem}`;
+      list?.querySelectorAll(`[data-${config.entityType}-id]`).forEach(item => {
+        const count = item.querySelector('.item-count');
+        if (count) count.textContent = window.AppState[countMethod](item.dataset[`${config.entityType}Id`]);
+      });
     });
   }
-
 };
+
 Object.assign(window.SidebarComponent, window.SidebarProjectMethods, window.SidebarTagMethods);
