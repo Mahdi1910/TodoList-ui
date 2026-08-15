@@ -1,4 +1,6 @@
-window.ScheduleRepeatEndMethods = {
+import { ModalFocusManager } from './modal-focus.js';
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+export const ScheduleRepeatEndMethods = {
   initRepeatEndUi() {
     if (this.repeatEndsRow) return;
     const row = document.createElement('button');
@@ -101,7 +103,7 @@ window.ScheduleRepeatEndMethods = {
 
   renderRepeatEndRow() {
     if (!this.repeatEndsRow) return;
-    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
     const active = this.draftRepeat.mode !== 'none';
     this.repeatEndsRow.hidden = !active;
     if (!active) return;
@@ -113,26 +115,26 @@ window.ScheduleRepeatEndMethods = {
   },
 
   formatRepeatEndDate(value) {
-    const date = window.RepeatEngine.parseDate(value);
+    const date = RepeatEngine.parseDate(value);
     return date ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date) : '';
   },
 
   openRepeatEndModal() {
-    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
     if (this.draftRepeat.mode === 'none') return;
-    this.repeatEndSnapshot = window.RepeatEngine.clone(this.draftRepeat.end);
-    this.repeatEndDraft = window.RepeatEngine.clone(this.draftRepeat.end);
+    this.repeatEndSnapshot = RepeatEngine.clone(this.draftRepeat.end);
+    this.repeatEndDraft = RepeatEngine.clone(this.draftRepeat.end);
     const typeIndex = { never: 0, date: 1, count: 2 }[this.repeatEndDraft.type] ?? 0;
     const count = Math.max(1, Math.min(200, Number(this.repeatEndDraft.count) || 1));
     this.repeatEndDraft.count = count;
-    const baseDate = window.RepeatEngine.parseDate(this.repeatEndDraft.date || this.draftDate || window.RepeatEngine.today());
+    const baseDate = RepeatEngine.parseDate(this.repeatEndDraft.date || this.draftDate || RepeatEngine.today());
     this.repeatEndViewDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1, 12, 0, 0, 0);
     requestAnimationFrame(() => {
       this.scrollWheelToIndex(this.repeatEndTypeWheel, typeIndex, false, '');
       this.scrollWheelToIndex(this.repeatEndCountWheel, count - 1, false, '');
     });
     this.setRepeatEndType(this.repeatEndDraft.type);
-    window.ModalFocusManager.open(this.repeatEndModal, {
+    ModalFocusManager.open(this.repeatEndModal, {
       trigger: this.repeatEndsRow,
       initialFocus: this.repeatEndTypeWheel,
       fallbackFocus: this.repeatEndsRow
@@ -140,7 +142,7 @@ window.ScheduleRepeatEndMethods = {
   },
 
   closeRepeatEndModal() {
-    window.ModalFocusManager.close(this.repeatEndModal, {
+    ModalFocusManager.close(this.repeatEndModal, {
       fallbackFocus: this.repeatEndsRow
     });
     this.repeatEndDraft = null;
@@ -174,7 +176,7 @@ window.ScheduleRepeatEndMethods = {
     this.repeatEndDraft.type = type;
     if (type === 'never') { this.repeatEndDraft.date = null; this.repeatEndDraft.count = null; }
     if (type === 'date') {
-      this.repeatEndDraft.date ||= this.draftDate || window.RepeatEngine.today();
+      this.repeatEndDraft.date ||= this.draftDate || RepeatEngine.today();
       this.repeatEndDraft.count = null;
     }
     if (type === 'count') { this.repeatEndDraft.date = null; this.repeatEndDraft.count ||= 1; }
@@ -184,7 +186,7 @@ window.ScheduleRepeatEndMethods = {
   },
 
   navigateRepeatEndMonth(delta) {
-    const date = this.repeatEndViewDate || window.RepeatEngine.parseDate(window.RepeatEngine.today());
+    const date = this.repeatEndViewDate || RepeatEngine.parseDate(RepeatEngine.today());
     this.repeatEndViewDate = new Date(date.getFullYear(), date.getMonth() + delta, 1, 12, 0, 0, 0);
     this.renderRepeatEndCalendar();
   },
@@ -205,7 +207,7 @@ window.ScheduleRepeatEndMethods = {
 
   createRepeatEndDay(year, month, day, outside) {
     const date = new Date(year, month, day, 12, 0, 0, 0);
-    const value = window.RepeatEngine.formatDate(date);
+    const value = RepeatEngine.formatDate(date);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `calendar-day${outside ? ' outside-month' : ''}${this.repeatEndDraft?.date === value ? ' selected' : ''}`;
@@ -222,13 +224,13 @@ window.ScheduleRepeatEndMethods = {
   submitRepeatEnd() {
     if (!this.repeatEndDraft) return;
     if (this.repeatEndDraft.type === 'date') {
-      const start = this.draftDate || window.RepeatEngine.today();
+      const start = this.draftDate || RepeatEngine.today();
       if (!this.repeatEndDraft.date || this.repeatEndDraft.date < start) {
         this.repeatEndError.textContent = 'Choose an end date on or after the task date.';
         return;
       }
     }
-    this.draftRepeat = window.RepeatEngine.normalizeRepeatRule({ ...this.draftRepeat, end: this.repeatEndDraft });
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule({ ...this.draftRepeat, end: this.repeatEndDraft });
     this.closeRepeatEndModal();
     this.renderRepeatEndRow();
     this.updateRepeatSummary();

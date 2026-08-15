@@ -1,4 +1,5 @@
-window.SidebarTaxonomyDragMethods = {
+import { TaxonomyOrder } from '../taxonomy-order.js';
+export const SidebarTaxonomyDragMethods = {
   initTaxonomyDrag() {
     if (!this.sidebarEl || !this.projectListEl || !this.tagListEl) return;
     this.assertTaxonomyDragIntegration();
@@ -54,7 +55,7 @@ window.SidebarTaxonomyDragMethods = {
     if (!row || !row.contains(target)) return null;
     const entityType = node.dataset.taxonomyType === 'tag' ? 'tag' : 'project';
     const entityId = node.dataset.entityId;
-    const entity = window.TaxonomyOrder.getEntity(entityType, entityId);
+    const entity = TaxonomyOrder.getEntity(entityType, entityId);
     const container = this.getTaxonomyContainer(entityType);
     const sourceHost = node.parentElement;
     if (!entity || !container || !sourceHost || !container.contains(node)) return null;
@@ -214,11 +215,3 @@ window.SidebarTaxonomyDragMethods = {
     if (this.taxonomyDragPending?.pointerId === e.pointerId) this.cancelPendingTaxonomyDrag();
   }
 };
-
-Object.assign(
-  window.SidebarComponent,
-  window.SidebarTaxonomyDragMethods,
-  window.SidebarTaxonomyDragHierarchyMethods,
-  window.SidebarTaxonomyDragTouchMethods,
-  window.SidebarTaxonomyDragCommitMethods
-);

@@ -1,4 +1,4 @@
-window.ScheduleRepeatCalendarMethods = {
+export const ScheduleRepeatCalendarMethods = {
   renderCustomRepeatMonthGrid() {
     if (!this.repeatMonthDaysGrid || !this.repeatMonthGridTitle) return;
 

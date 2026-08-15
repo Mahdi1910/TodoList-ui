@@ -1,4 +1,6 @@
-window.TodoStorageMappers = (() => {
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+
+export const TodoStorageMappers = (() => {
   const BUILTIN_REMINDERS = Object.freeze([
     { id: 'on_time', label: 'On time', minutesBefore: 0 },
     { id: '5_min', label: '5m before', minutesBefore: 5 },
@@ -44,13 +46,13 @@ window.TodoStorageMappers = (() => {
     const mappedRepeat = repeatData?.repeat || null;
     const storedState = repeatData?.repeatState || null;
     const activeRepeat = mappedRepeat && mappedRepeat.mode !== 'none';
-    const dueDate = activeRepeat && !row.dueDate ? window.RepeatEngine.today() : (row.dueDate || null);
+    const dueDate = activeRepeat && !row.dueDate ? RepeatEngine.today() : (row.dueDate || null);
     let repeat = null;
     let repeatState = null;
 
     if (activeRepeat) {
-      repeat = window.RepeatEngine.normalizeRepeatRule(mappedRepeat);
-      repeatState = window.RepeatEngine.createInitialRepeatState(repeat, dueDate, storedState || {});
+      repeat = RepeatEngine.normalizeRepeatRule(mappedRepeat);
+      repeatState = RepeatEngine.createInitialRepeatState(repeat, dueDate, storedState || {});
       repeatState.seriesId = storedState?.seriesId || createId('series');
       repeatState._needsRepair = Boolean(storedState?._needsRepair || !row.dueDate);
     }
@@ -77,7 +79,7 @@ window.TodoStorageMappers = (() => {
   }
 
   function repeatToRow(taskId, repeat, repeatState = null) {
-    const normalized = window.RepeatEngine.normalizeRepeatRule(repeat);
+    const normalized = RepeatEngine.normalizeRepeatRule(repeat);
     if (normalized.mode === 'none') return null;
     const custom = normalized.custom || {};
     const state = repeatState || {};
@@ -118,7 +120,7 @@ window.TodoStorageMappers = (() => {
         endCount: Number.isFinite(row.endCount) ? row.endCount : null
       }
     };
-    const repeat = window.RepeatEngine.normalizeRepeatRule({
+    const repeat = RepeatEngine.normalizeRepeatRule({
       ...legacy,
       end: {
         type: row.endType || legacy.custom.endType || 'never',

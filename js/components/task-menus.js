@@ -1,4 +1,5 @@
-window.TaskMenuMethods = {
+import { AppState } from '../state.js';
+export const TaskMenuMethods = {
   createProjectMenuItem(project) {
     const item = document.createElement('div');
     const selected = project.id === this.selectedProject;
@@ -52,7 +53,7 @@ window.TaskMenuMethods = {
     inboxItem.setAttribute('aria-selected', this.selectedProject === '' ? 'true' : 'false');
     this.menuProject.appendChild(inboxItem);
 
-    window.AppState.projects.forEach(project => {
+    AppState.projects.forEach(project => {
       this.menuProject.appendChild(this.createProjectMenuItem(project));
     });
   },
@@ -61,7 +62,7 @@ window.TaskMenuMethods = {
     if (!this.menuTags) return;
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
-      window.AppState.tags.filter(tag => (tag.parentId || null) === parentId).forEach(tag => {
+      AppState.tags.filter(tag => (tag.parentId || null) === parentId).forEach(tag => {
         this.menuTags.appendChild(this.createTagMenuItem(tag, depth));
         renderLevel(tag.id, depth + 1);
       });

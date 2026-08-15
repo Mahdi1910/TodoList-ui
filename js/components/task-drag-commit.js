@@ -1,4 +1,6 @@
-window.TaskDragCommitMethods = {
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+export const TaskDragCommitMethods = {
   async commitTaskDrag() {
     const session = this.dragSession;
     if (!session) return;
@@ -20,7 +22,7 @@ window.TaskDragCommitMethods = {
         customOrderSnapshot = workspace.buildCustomOrderSnapshot();
       }
 
-      await window.AppDataService.commitHierarchyDrag({
+      await AppDataService.commitHierarchyDrag({
         taskId: session.taskId,
         targetLevel: session.previewLevel,
         targetParentId: session.previewParentId,
@@ -36,7 +38,7 @@ window.TaskDragCommitMethods = {
         workspace.syncUI();
       }
     } catch (error) {
-      window.AppPersistence.reportError('Could not save the new task hierarchy or position.', error);
+      AppPersistence.reportError('Could not save the new task hierarchy or position.', error);
     }
     this.cleanupTaskDrag(true);
   },

@@ -1,4 +1,4 @@
-window.ScheduleWheelMethods = {
+export const ScheduleWheelMethods = {
   initWheels() {
     const hours = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
     const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));

@@ -1,5 +1,7 @@
-window.TodoRepositories = (() => {
-  const db = () => window.TodoDb;
+import { TodoDb } from './db.js';
+
+export const TodoRepositories = (() => {
+  const db = () => TodoDb;
 
   function store(tx, storeName) {
     return tx.objectStore(storeName);

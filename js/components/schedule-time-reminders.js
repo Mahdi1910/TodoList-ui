@@ -1,4 +1,9 @@
-window.ScheduleTimeReminderMethods = {
+import { TodoStorageMappers } from '../storage/mappers.js';
+import { ModalFocusManager } from './modal-focus.js';
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const ScheduleTimeReminderMethods = {
   scrollWheelsToDraftTime() {
     if (!this.draftTime) this.draftTime = this.getCurrentTimeObj();
 
@@ -49,13 +54,13 @@ window.ScheduleTimeReminderMethods = {
   },
 
   getCustomReminders() {
-    return window.AppState.getCustomReminderDefinitions()
-      .map(definition => window.TodoStorageMappers.definitionToCustomReminder(definition))
+    return AppState.getCustomReminderDefinitions()
+      .map(definition => TodoStorageMappers.definitionToCustomReminder(definition))
       .filter(Boolean);
   },
 
   getReminderLabel(reminderId) {
-    const definition = window.AppState.getReminderDefinition(reminderId);
+    const definition = AppState.getReminderDefinition(reminderId);
     return definition?.label || reminderId;
   },
 
@@ -143,14 +148,14 @@ window.ScheduleTimeReminderMethods = {
 
   async deleteCustomReminder(id) {
     try {
-      const deleted = await window.AppDataService.deleteReminderDefinition(id);
+      const deleted = await AppDataService.deleteReminderDefinition(id);
       if (!deleted) return;
       this.draftReminders = this.draftReminders.filter(key => key !== id);
       if (!this.draftReminders.length) this.draftReminders = ['none'];
       this.updateReminderUI();
       this.renderReminderMenuContent();
     } catch (error) {
-      window.AppPersistence.reportError('Could not delete this custom reminder.', error);
+      AppPersistence.reportError('Could not delete this custom reminder.', error);
     }
   },
 
@@ -164,7 +169,7 @@ window.ScheduleTimeReminderMethods = {
       this.scrollWheelToIndex(this.wheelCustomDay, 0, false, 'customDay');
     });
 
-    window.ModalFocusManager.open(this.customReminderModal, {
+    ModalFocusManager.open(this.customReminderModal, {
       trigger: this.btnOpenCustomReminder,
       initialFocus: this.wheelCustomMin,
       fallbackFocus: this.btnOpenCustomReminder
@@ -173,7 +178,7 @@ window.ScheduleTimeReminderMethods = {
 
   closeCustomReminderModal() {
     if (!this.customReminderModal) return;
-    window.ModalFocusManager.close(this.customReminderModal, {
+    ModalFocusManager.close(this.customReminderModal, {
       fallbackFocus: this.btnOpenCustomReminder
     });
   },
@@ -195,11 +200,11 @@ window.ScheduleTimeReminderMethods = {
     };
 
     try {
-      await window.AppDataService.saveReminderDefinition(custom);
+      await AppDataService.saveReminderDefinition(custom);
       this.toggleReminderSelection(custom.id);
       this.closeCustomReminderModal();
     } catch (error) {
-      window.AppPersistence.reportError('Could not save this custom reminder.', error);
+      AppPersistence.reportError('Could not save this custom reminder.', error);
     }
   }
 };

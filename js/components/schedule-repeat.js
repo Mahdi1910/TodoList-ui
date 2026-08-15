@@ -1,11 +1,18 @@
-window.ScheduleRepeatMethods = {
+import { ModalFocusManager } from './modal-focus.js';
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+
+export const ScheduleRepeatMethods = {
   selectRepeatPreset(presetMode) {
     if (!this.draftRepeat) {
       this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
     }
     this.draftRepeat.mode = presetMode;
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    if (presetMode !== 'none' && !this.draftDate) this.selectDate(RepeatEngine.today());
+    this.clearRepeatValidationError?.();
     this.renderRepeatPresetList();
     this.updateRepeatSummary();
+    this.renderRepeatEndRow?.();
   },
 
   renderRepeatPresetList() {
@@ -97,7 +104,7 @@ window.ScheduleRepeatMethods = {
     });
 
     this.updateCustomRepeatSubviews(custom.unit);
-    window.ModalFocusManager.open(this.customRepeatModal, {
+    ModalFocusManager.open(this.customRepeatModal, {
       trigger: this.btnOpenCustomRepeat,
       initialFocus: this.wheelRepeatInterval,
       fallbackFocus: this.btnOpenCustomRepeat
@@ -110,7 +117,7 @@ window.ScheduleRepeatMethods = {
       this.draftRepeat = JSON.parse(JSON.stringify(this.customRepeatSnapshot));
     }
     this.customRepeatSnapshot = null;
-    window.ModalFocusManager.close(this.customRepeatModal, {
+    ModalFocusManager.close(this.customRepeatModal, {
       fallbackFocus: this.btnOpenCustomRepeat
     });
     this.renderRepeatPresetList();
@@ -118,8 +125,16 @@ window.ScheduleRepeatMethods = {
   },
 
   submitCustomRepeat() {
-    this.draftRepeat.mode = 'custom';
+    const candidate = RepeatEngine.normalizeRepeatRule({ ...this.draftRepeat, mode: 'custom' });
+    const check = RepeatEngine.validateRepeatRule(candidate);
+    if (!check.valid) return this.showRepeatValidationError(check.message);
+    this.clearRepeatValidationError();
+    this.draftRepeat = check.repeat;
+    if (!this.draftDate) this.selectDate(RepeatEngine.today());
     this.closeCustomRepeatModal(true);
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    this.renderRepeatEndRow?.();
+    return true;
   },
 
   updateCustomRepeatSubviews(unit) {

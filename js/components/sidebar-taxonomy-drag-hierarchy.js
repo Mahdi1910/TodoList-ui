@@ -1,4 +1,5 @@
-window.SidebarTaxonomyDragHierarchyMethods = {
+import { TaxonomyOrder } from '../taxonomy-order.js';
+export const SidebarTaxonomyDragHierarchyMethods = {
   getTaxonomyContainer(entityType) {
     return entityType === 'tag' ? this.tagListEl : this.projectListEl;
   },
@@ -33,26 +34,26 @@ window.SidebarTaxonomyDragHierarchyMethods = {
   isValidTaxonomyParent(entityType, entityId, parentId) {
     if (!parentId) return true;
     if (parentId === entityId) return false;
-    const parent = window.TaxonomyOrder.getEntity(entityType, parentId);
+    const parent = TaxonomyOrder.getEntity(entityType, parentId);
     if (!parent) return false;
-    return !window.TaxonomyOrder.getDescendantIds(entityType, entityId).includes(parentId);
+    return !TaxonomyOrder.getDescendantIds(entityType, entityId).includes(parentId);
   },
 
   buildTaxonomySourceAncestorZones(entityType, entityId, sourceDepth = null) {
     const zones = new Map();
-    let current = window.TaxonomyOrder.getEntity(entityType, entityId);
+    let current = TaxonomyOrder.getEntity(entityType, entityId);
     if (!current) return zones;
 
     let zoneDepth = Number.isFinite(sourceDepth)
       ? sourceDepth
-      : window.TaxonomyOrder.getDepth(entityType, entityId);
+      : TaxonomyOrder.getDepth(entityType, entityId);
     let parentId = current.parentId || null;
     const seen = new Set([entityId]);
 
     while (parentId && zoneDepth > 0 && !seen.has(parentId)) {
       zones.set(parentId, zoneDepth);
       seen.add(parentId);
-      current = window.TaxonomyOrder.getEntity(entityType, parentId);
+      current = TaxonomyOrder.getEntity(entityType, parentId);
       parentId = current?.parentId || null;
       zoneDepth -= 1;
     }

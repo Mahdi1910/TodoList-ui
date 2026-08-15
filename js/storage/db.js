@@ -1,4 +1,6 @@
-window.TodoDb = (() => {
+import { TodoDbSchema } from './db-schema.js';
+
+export const TodoDb = (() => {
   let openPromise = null;
 
   function request(requestObject) {
@@ -19,7 +21,7 @@ window.TodoDb = (() => {
   function open() {
     if (openPromise) return openPromise;
     openPromise = new Promise((resolve, reject) => {
-      const schema = window.TodoDbSchema;
+      const schema = TodoDbSchema;
       const openRequest = indexedDB.open(schema.NAME, schema.VERSION);
       openRequest.addEventListener('upgradeneeded', event => {
         schema.upgrade(openRequest.result, event.oldVersion, openRequest.transaction);

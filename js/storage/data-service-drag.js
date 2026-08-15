@@ -1,4 +1,9 @@
-Object.assign(window.AppDataService, {
+import { TodoStorageMappers } from './mappers.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoDb } from './db.js';
+import { TodoDbSchema } from './db-schema.js';
+import { AppState } from '../state.js';
+export const DataServiceDragMethods = {
   customOrderScopeKey(parentTaskId = null) {
     return parentTaskId || '__root__';
   },
@@ -21,7 +26,7 @@ Object.assign(window.AppDataService, {
       const orderedIds = rawScope.orderedIds.map(id => {
         if (typeof id !== 'string' || !id) throw new Error('Custom order snapshot contains an invalid task ID.');
         if (localIds.has(id) || seenTaskIds.has(id)) throw new Error('Custom order snapshot contains a duplicate task.');
-        const task = window.AppState.getTask(id);
+        const task = AppState.getTask(id);
         if (!task) throw new Error('Custom order snapshot references a missing task.');
         if ((task.parentTaskId || null) !== parentTaskId) {
           throw new Error('Custom order snapshot contains a task in the wrong sibling scope.');
@@ -31,7 +36,7 @@ Object.assign(window.AppDataService, {
         return id;
       });
 
-      const expectedIds = window.AppState.getSiblingTaskIds(parentTaskId);
+      const expectedIds = AppState.getSiblingTaskIds(parentTaskId);
       if (orderedIds.length !== expectedIds.length || expectedIds.some(id => !localIds.has(id))) {
         throw new Error('Custom order snapshot does not cover a complete sibling scope.');
       }
@@ -41,8 +46,8 @@ Object.assign(window.AppDataService, {
 
     const expectedParents = [
       null,
-      ...window.AppState.getRootTasks()
-        .filter(task => window.AppState.hasSubtasks(task.id))
+      ...AppState.getRootTasks()
+        .filter(task => AppState.hasSubtasks(task.id))
         .map(task => task.id)
     ];
 
@@ -81,7 +86,7 @@ Object.assign(window.AppDataService, {
 
   activateCustomSort(orderSnapshot) {
     return this.enqueue(async () => {
-      const copies = new Map(window.AppState.tasks.map(task => [task.id, {
+      const copies = new Map(AppState.tasks.map(task => [task.id, {
         ...task,
         tags: [...(task.tags || [])],
         reminders: [...(task.reminders || [])]
@@ -89,34 +94,34 @@ Object.assign(window.AppDataService, {
       const changed = new Set();
       this.applyCustomOrderSnapshot(copies, changed, orderSnapshot);
 
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction([S.TASKS, S.APP_SETTINGS], 'readwrite', async tx => {
+      const S = TodoDbSchema.STORES;
+      await TodoDb.withTransaction([S.TASKS, S.APP_SETTINGS], 'readwrite', async tx => {
         for (const id of changed) {
-          await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(copies.get(id)));
+          await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(copies.get(id)));
         }
-        await window.TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
+        await TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
       });
 
       if (changed.size) {
-        window.AppStateSync.replaceTasks([...changed].map(id => copies.get(id)));
+        AppStateSync.replaceTasks([...changed].map(id => copies.get(id)));
       }
-      window.AppStateSync.setSetting('sortKey', 'custom');
+      AppStateSync.setSetting('sortKey', 'custom');
       return true;
     });
   },
 
   commitTaskDrag({ taskId, orderedVisibleIds = [], sourceContext = null, destination = null } = {}) {
     return this.enqueue(async () => {
-      const task = window.AppState.getTask(taskId);
+      const task = AppState.getTask(taskId);
       if (!task || task.parentTaskId) throw new Error('Only root tasks can be reordered.');
 
-      const currentRootIds = window.AppState.getRootTaskIds();
+      const currentRootIds = AppState.getRootTaskIds();
       const visibleIds = [...new Set(orderedVisibleIds)].filter(id => currentRootIds.includes(id));
       const visibleSet = new Set(visibleIds);
       let visibleIndex = 0;
       const nextRootIds = currentRootIds.map(id => visibleSet.has(id) ? visibleIds[visibleIndex++] : id);
       const orderById = new Map(nextRootIds.map((id, index) => [id, index]));
-      const rootCopies = new Map(window.AppState.getRootTasks().map(item => [item.id, {
+      const rootCopies = new Map(AppState.getRootTasks().map(item => [item.id, {
         ...item, sortOrder: orderById.get(item.id) ?? item.sortOrder
       }]));
 
@@ -143,35 +148,35 @@ Object.assign(window.AppDataService, {
           if (key && !nextTags.includes(key)) nextTags.push(key);
           moved.tags = nextTags;
         }
-        moved.updatedAt = window.TodoStorageMappers.nowIso();
+        moved.updatedAt = TodoStorageMappers.nowIso();
       }
 
       const updatedChildren = projectChanged
-        ? window.AppState.getSubtasks(taskId).map(child => ({
+        ? AppState.getSubtasks(taskId).map(child => ({
           ...child, project: moved.project, updatedAt: moved.updatedAt
         }))
         : [];
-      const S = window.TodoDbSchema.STORES;
+      const S = TodoDbSchema.STORES;
       const stores = [S.TASKS, S.APP_SETTINGS];
       if (metadataChanged && destination.groupType === 'tag') stores.push(S.TASK_TAGS);
 
-      await window.TodoDb.withTransaction(stores, 'readwrite', async tx => {
+      await TodoDb.withTransaction(stores, 'readwrite', async tx => {
         for (const root of rootCopies.values()) {
-          await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(root));
+          await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(root));
         }
         for (const child of updatedChildren) {
-          await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(child));
+          await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(child));
         }
         if (metadataChanged && destination.groupType === 'tag') {
-          await window.TodoRepositories.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', taskId,
+          await TodoRepositories.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', taskId,
             nextTags.map(tagId => ({ taskId, tagId })));
         }
-        await window.TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
+        await TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
       });
 
-      window.AppStateSync.replaceTasks([...rootCopies.values(), ...updatedChildren]);
-      window.AppStateSync.setSetting('sortKey', 'custom');
+      AppStateSync.replaceTasks([...rootCopies.values(), ...updatedChildren]);
+      AppStateSync.setSetting('sortKey', 'custom');
       return true;
     });
   }
-});
+};

@@ -1,9 +1,17 @@
+import { AppState } from '../state.js';
+import { SidebarProjectMethods } from './sidebar-projects.js';
+import { SidebarTagMethods } from './sidebar-tags.js';
+import { SidebarTaxonomyDragMethods } from './sidebar-taxonomy-drag.js';
+import { SidebarTaxonomyDragHierarchyMethods } from './sidebar-taxonomy-drag-hierarchy.js';
+import { SidebarTaxonomyDragTouchMethods } from './sidebar-taxonomy-drag-touch.js';
+import { SidebarTaxonomyDragCommitMethods } from './sidebar-taxonomy-drag-commit.js';
+
 /**
  * Sidebar Component Handler
  * Manages drawer state, filters, counts, and accessible navigation state.
  */
 
-window.SidebarComponent = {
+const SidebarCore = {
   init() {
     this.sidebarEl = document.getElementById('secondary-sidebar');
     this.backdropEl = document.getElementById('sidebar-backdrop');
@@ -42,14 +50,14 @@ window.SidebarComponent = {
     targetBtn.classList.add('active');
 
     if (targetBtn.dataset.filter) {
-      window.AppState.currentFilter = targetBtn.dataset.filter;
-      window.AppState.currentFilterType = 'smart';
+      AppState.currentFilter = targetBtn.dataset.filter;
+      AppState.currentFilterType = 'smart';
     } else if (targetBtn.dataset.project) {
-      window.AppState.currentFilter = targetBtn.dataset.project;
-      window.AppState.currentFilterType = 'project';
+      AppState.currentFilter = targetBtn.dataset.project;
+      AppState.currentFilterType = 'project';
     } else if (targetBtn.dataset.tag) {
-      window.AppState.currentFilter = targetBtn.dataset.tag;
-      window.AppState.currentFilterType = 'tag';
+      AppState.currentFilter = targetBtn.dataset.tag;
+      AppState.currentFilterType = 'tag';
     }
 
     const title = targetBtn.dataset.title || targetBtn.querySelector('.item-left')?.textContent.trim() || 'Inbox';
@@ -62,16 +70,16 @@ window.SidebarComponent = {
   syncCurrentView() {
     const items = [...document.querySelectorAll('.sidebar-nav-item')];
     let target = null;
-    if (window.AppState.currentFilterType === 'smart') {
-      target = items.find(item => item.dataset.filter === window.AppState.currentFilter);
-    } else if (window.AppState.currentFilterType === 'project') {
-      target = items.find(item => item.dataset.project === window.AppState.currentFilter);
-    } else if (window.AppState.currentFilterType === 'tag') {
-      target = items.find(item => item.dataset.tag === window.AppState.currentFilter);
+    if (AppState.currentFilterType === 'smart') {
+      target = items.find(item => item.dataset.filter === AppState.currentFilter);
+    } else if (AppState.currentFilterType === 'project') {
+      target = items.find(item => item.dataset.project === AppState.currentFilter);
+    } else if (AppState.currentFilterType === 'tag') {
+      target = items.find(item => item.dataset.tag === AppState.currentFilter);
     }
     if (!target) {
-      window.AppState.currentFilter = 'inbox';
-      window.AppState.currentFilterType = 'smart';
+      AppState.currentFilter = 'inbox';
+      AppState.currentFilterType = 'smart';
       target = items.find(item => item.dataset.filter === 'inbox');
     }
     items.forEach(item => item.classList.toggle('active', item === target));
@@ -125,19 +133,29 @@ window.SidebarComponent = {
       const element = document.getElementById(id);
       if (element) element.textContent = value;
     };
-    set('count-inbox', window.AppState.countInbox());
-    set('count-today', window.AppState.countToday());
-    set('count-completed', window.AppState.countCompleted());
+    set('count-inbox', AppState.countInbox());
+    set('count-today', AppState.countToday());
+    set('count-completed', AppState.countCompleted());
 
     this.taxonomyConfigs.forEach(config => {
       const list = this[`${config.entityType}ListEl`];
       const countMethod = `count${config.stem}`;
       list?.querySelectorAll(`[data-${config.entityType}-id]`).forEach(item => {
         const count = item.querySelector('.item-count');
-        if (count) count.textContent = window.AppState[countMethod](item.dataset[`${config.entityType}Id`]);
+        if (count) count.textContent = AppState[countMethod](item.dataset[`${config.entityType}Id`]);
       });
     });
   }
 };
 
-Object.assign(window.SidebarComponent, window.SidebarProjectMethods, window.SidebarTagMethods);
+export const SidebarComponent = {
+  ...SidebarCore,
+  ...SidebarProjectMethods,
+  ...SidebarTagMethods,
+  ...SidebarTaxonomyDragMethods,
+  ...SidebarTaxonomyDragHierarchyMethods,
+  ...SidebarTaxonomyDragTouchMethods,
+  ...SidebarTaxonomyDragCommitMethods
+};
+
+window.SidebarComponent = SidebarComponent;

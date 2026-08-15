@@ -1,4 +1,5 @@
-window.TaskDragMethods = {
+import { AppState } from '../state.js';
+export const TaskDragMethods = {
   initTaskDrag() {
     this.dragWorkspace = document.querySelector('.workspace-content');
     if (!this.dragWorkspace) return;
@@ -70,7 +71,7 @@ window.TaskDragMethods = {
 
     const subtaskItem = target.closest('.subtask-drag-item');
     if (subtaskItem) {
-      const task = window.AppState.getTask(subtaskItem.dataset.taskId);
+      const task = AppState.getTask(subtaskItem.dataset.taskId);
       const sourceFamily = subtaskItem.closest('.task-family');
       const sourceLane = sourceFamily?.closest('[data-task-drop-lane]');
       if (!task?.parentTaskId || !sourceFamily || !sourceLane) return null;
@@ -88,7 +89,7 @@ window.TaskDragMethods = {
     const rootCard = this.getRootCard(family);
     const sourceLane = family?.closest('[data-task-drop-lane]');
     if (!family || !rootCard || !rootCard.contains(target) || !sourceLane) return null;
-    const task = window.AppState.getTask(family.dataset.parentId);
+    const task = AppState.getTask(family.dataset.parentId);
     if (!task || task.parentTaskId) return null;
     return { unit: family, task, level: 'root', parentId: null, sourceFamily: family, sourceLane };
   },
@@ -139,7 +140,7 @@ window.TaskDragMethods = {
   },
 
   beginTaskDragSession(pending, inputType) {
-    const task = window.AppState.getTask(pending.task.id);
+    const task = AppState.getTask(pending.task.id);
     const sourceLane = pending.sourceLane;
     if (!task || !sourceLane || !pending.unit?.isConnected) return;
 

@@ -1,4 +1,4 @@
-window.RepeatEngine = (() => {
+export const RepeatEngine = (() => {
   const VALID_MODES = new Set(['none', 'daily', 'weekly', 'monthly', 'yearly', 'custom']);
   const VALID_UNITS = new Set(['day', 'week', 'month', 'year']);
   const VALID_ENDS = new Set(['never', 'date', 'count']);

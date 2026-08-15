@@ -1,4 +1,6 @@
-window.SidebarTaxonomyDragCommitMethods = {
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+export const SidebarTaxonomyDragCommitMethods = {
   isTaxonomyPreviewUnchanged(session) {
     const initial = session?.initialPreview;
     if (!initial) return false;
@@ -18,7 +20,7 @@ window.SidebarTaxonomyDragCommitMethods = {
 
     const entityType = session.entityType;
     try {
-      await window.AppDataService.commitTaxonomyDrag({
+      await AppDataService.commitTaxonomyDrag({
         entityType,
         entityId: session.entityId,
         targetParentId: session.previewParentId,
@@ -30,7 +32,7 @@ window.SidebarTaxonomyDragCommitMethods = {
     } catch (error) {
       this.cleanupTaxonomyDrag(false);
       this.refreshTaxonomyAfterDrag(entityType);
-      window.AppPersistence?.reportError?.(`Could not save the ${entityType} hierarchy change.`, error);
+      AppPersistence?.reportError?.(`Could not save the ${entityType} hierarchy change.`, error);
     }
   },
 

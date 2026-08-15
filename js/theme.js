@@ -1,15 +1,17 @@
+import { AppState } from './state.js';
+
 /**
  * Theme Manager: Dark Mode & Light Mode Switcher
  */
 
-window.ThemeManager = {
+export const ThemeManager = {
   init() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     this.setTheme(savedTheme);
   },
 
   setTheme(themeName) {
-    window.AppState.theme = themeName;
+    AppState.theme = themeName;
     document.documentElement.setAttribute('data-theme', themeName);
     localStorage.setItem('theme', themeName);
 
@@ -21,7 +23,7 @@ window.ThemeManager = {
   },
 
   toggleTheme() {
-    const nextTheme = window.AppState.theme === 'dark' ? 'light' : 'dark';
+    const nextTheme = AppState.theme === 'dark' ? 'light' : 'dark';
     this.setTheme(nextTheme);
   }
 };

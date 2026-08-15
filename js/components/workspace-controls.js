@@ -1,4 +1,7 @@
-window.WorkspaceControls = {
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const WorkspaceControls = {
   sortKey: 'custom',
   sortDirection: 'asc',
   groupKey: 'none',
@@ -6,7 +9,7 @@ window.WorkspaceControls = {
   settingsPanelOpen: false,
 
   init() {
-    const settings = window.AppState.settings || {};
+    const settings = AppState.settings || {};
     this.sortKey = this.normalizeSortKey(settings.sortKey || 'custom');
     this.sortDirection = settings.sortDirection === 'desc' ? 'desc' : 'asc';
     this.groupKey = ['none', 'priority', 'date', 'project', 'tag'].includes(settings.groupKey) ? settings.groupKey : 'none';
@@ -114,14 +117,14 @@ window.WorkspaceControls = {
   },
 
   buildCustomOrderSnapshot() {
-    const roots = window.AppState.getRootTasks();
+    const roots = AppState.getRootTasks();
     const snapshot = [{
       parentTaskId: null,
       orderedIds: this.sortTasks(roots).map(task => task.id)
     }];
 
     roots.forEach(parent => {
-      const children = window.AppState.getSubtasks(parent.id);
+      const children = AppState.getSubtasks(parent.id);
       if (!children.length) return;
       snapshot.push({
         parentTaskId: parent.id,
@@ -142,22 +145,22 @@ window.WorkspaceControls = {
         const current = this.normalizeSortKey(this.sortKey);
         if (value === 'custom' && current !== 'custom') {
           const snapshot = this.buildCustomOrderSnapshot();
-          await window.AppDataService.activateCustomSort(snapshot);
+          await AppDataService.activateCustomSort(snapshot);
           this.sortKey = 'custom';
         } else if (value !== current) {
-          await window.AppDataService.setSetting('sortKey', value);
+          await AppDataService.setSetting('sortKey', value);
           this.sortKey = value;
         }
       }
       if (groupItem) {
         const value = groupItem.dataset.groupKey;
-        await window.AppDataService.setSetting('groupKey', value);
+        await AppDataService.setSetting('groupKey', value);
         this.groupKey = value;
       }
       this.syncUI();
       window.TasksComponent?.render();
     } catch (error) {
-      window.AppPersistence.reportError('Could not save the Sort & Group setting.', error);
+      AppPersistence.reportError('Could not save the Sort & Group setting.', error);
     }
   },
 
@@ -184,27 +187,27 @@ window.WorkspaceControls = {
   async setViewType(viewType, { persist = true, render = true } = {}) {
     const next = this.normalizeViewType(viewType);
     try {
-      if (persist && window.AppState.currentFilterType === 'project') {
-        await window.AppDataService.setEntityViewType('project', window.AppState.currentFilter, next);
-      } else if (persist && window.AppState.currentFilterType === 'tag') {
-        await window.AppDataService.setEntityViewType('tag', window.AppState.currentFilter, next);
+      if (persist && AppState.currentFilterType === 'project') {
+        await AppDataService.setEntityViewType('project', AppState.currentFilter, next);
+      } else if (persist && AppState.currentFilterType === 'tag') {
+        await AppDataService.setEntityViewType('tag', AppState.currentFilter, next);
       }
       this.viewType = next;
       this.syncUI();
       if (render) window.TasksComponent?.render();
       return next;
     } catch (error) {
-      window.AppPersistence.reportError('Could not save the selected view.', error);
+      AppPersistence.reportError('Could not save the selected view.', error);
       return this.viewType;
     }
   },
 
   syncViewFromCurrentFilter() {
     let viewType = this.viewType;
-    if (window.AppState.currentFilterType === 'project') {
-      viewType = window.AppState.getProject(window.AppState.currentFilter)?.viewType || 'list';
-    } else if (window.AppState.currentFilterType === 'tag') {
-      viewType = window.AppState.getTag(window.AppState.currentFilter)?.viewType || 'list';
+    if (AppState.currentFilterType === 'project') {
+      viewType = AppState.getProject(AppState.currentFilter)?.viewType || 'list';
+    } else if (AppState.currentFilterType === 'tag') {
+      viewType = AppState.getTag(AppState.currentFilter)?.viewType || 'list';
     }
     this.viewType = this.normalizeViewType(viewType);
     this.syncUI();
@@ -219,12 +222,12 @@ window.WorkspaceControls = {
     if (this.normalizeSortKey(this.sortKey) === 'custom') return;
     const next = this.sortDirection === 'asc' ? 'desc' : 'asc';
     try {
-      await window.AppDataService.setSetting('sortDirection', next);
+      await AppDataService.setSetting('sortDirection', next);
       this.sortDirection = next;
       this.syncUI();
       window.TasksComponent?.render();
     } catch (error) {
-      window.AppPersistence.reportError('Could not save sort direction.', error);
+      AppPersistence.reportError('Could not save sort direction.', error);
     }
   },
 
@@ -286,3 +289,5 @@ window.WorkspaceControls = {
     return sorted;
   }
 };
+
+window.WorkspaceControls = WorkspaceControls;

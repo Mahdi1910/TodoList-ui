@@ -1,10 +1,13 @@
-window.AppStateSync = (() => {
-  const state = () => window.AppState;
-  const normalizeTask = task => window.TaskModel.normalizeTask(task);
+import { AppState } from './state.js';
+import { TaskModel } from './task-model.js';
+import { TaskOrderMethods } from './task-order.js';
+
+export const AppStateSync = (() => {
+  const state = () => AppState;
+  const normalizeTask = task => TaskModel.normalizeTask(task);
 
   function orderTasks(tasks = []) {
-    if (window.TaskOrderMethods?.orderTasks) return window.TaskOrderMethods.orderTasks(tasks);
-    return [...tasks];
+    return TaskOrderMethods.orderTasks(tasks);
   }
 
   function hydrate({ projects = [], tags = [], tasks = [], reminderDefinitions = [], settings = {} } = {}) {

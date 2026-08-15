@@ -1,9 +1,14 @@
+import { ThemeManager } from '../theme.js';
+import { ModalFocusManager } from './modal-focus.js';
+import { AppState } from '../state.js';
+import { AppBackupService } from '../storage/backup-service.js';
+
 /**
  * Settings Component Manager
  * Handles preferences, theme changes, and backup/restore interaction.
  */
 
-window.SettingsComponent = {
+export const SettingsComponent = {
   init() {
     this.openBtn = document.getElementById('btn-open-settings');
     this.mobileOpenBtn = document.getElementById('btn-mobile-open-settings');
@@ -35,7 +40,7 @@ window.SettingsComponent = {
     this.closeBtn?.addEventListener('click', () => this.closeModal());
     this.saveBtn?.addEventListener('click', () => this.closeModal());
     this.themeToggle?.addEventListener('change', event => {
-      window.ThemeManager.setTheme(event.target.checked ? 'light' : 'dark');
+      ThemeManager.setTheme(event.target.checked ? 'light' : 'dark');
     });
     this.createBackupBtn?.addEventListener('click', () => this.createBackup());
     this.restoreBackupBtn?.addEventListener('click', () => this.chooseRestoreFile());
@@ -51,49 +56,6 @@ window.SettingsComponent = {
         this.closeModal();
       }
     });
-  },
-
-  loadBackupScript(src) {
-    const existing = document.querySelector(`script[data-backup-src="${src}"]`);
-    if (existing?.dataset.loaded === 'true') return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      const script = existing || document.createElement('script');
-      const cleanup = () => {
-        script.removeEventListener('load', onLoad);
-        script.removeEventListener('error', onError);
-      };
-      const onLoad = () => { script.dataset.loaded = 'true'; cleanup(); resolve(); };
-      const onError = () => { cleanup(); reject(new Error(`Could not load ${src}`)); };
-      script.addEventListener('load', onLoad, { once: true });
-      script.addEventListener('error', onError, { once: true });
-      if (!existing) {
-        script.src = src;
-        script.dataset.backupSrc = src;
-        document.head.appendChild(script);
-      }
-    });
-  },
-
-  ensureBackupServices() {
-    if (window.AppBackupService && window.AppBackupValidation && typeof window.AppDataService?.whenIdle === 'function') {
-      return Promise.resolve();
-    }
-    if (!this.backupServicesPromise) {
-      this.backupServicesPromise = (async () => {
-        const scripts = [
-          'js/storage/backup-validation.js',
-          'js/storage/backup-service.js'
-        ];
-        for (const src of scripts) await this.loadBackupScript(src);
-        if (!window.AppBackupService || !window.AppBackupValidation || typeof window.AppDataService?.whenIdle !== 'function') {
-          throw new Error('Backup services could not be initialized.');
-        }
-      })().catch(error => {
-        this.backupServicesPromise = null;
-        throw error;
-      });
-    }
-    return this.backupServicesPromise;
   },
 
   setBackupStatus(message = '', state = '') {
@@ -116,8 +78,7 @@ window.SettingsComponent = {
     this.setDataBusy(true);
     this.setBackupStatus('Creating backup…');
     try {
-      await this.ensureBackupServices();
-      await window.AppBackupService.downloadBackup();
+      await AppBackupService.downloadBackup();
       this.setBackupStatus('Backup downloaded.', 'success');
     } catch (error) {
       this.setBackupStatus(error?.message || 'Could not create the backup.', 'error');
@@ -141,9 +102,8 @@ window.SettingsComponent = {
     this.setDataBusy(true);
     this.setBackupStatus('Checking backup…');
     try {
-      await this.ensureBackupServices();
-      const snapshot = await window.AppBackupService.parseBackupFile(file);
-      const summary = window.AppBackupService.getRestoreSummary(snapshot);
+      const snapshot = await AppBackupService.parseBackupFile(file);
+      const summary = AppBackupService.getRestoreSummary(snapshot);
       this.pendingRestoreSnapshot = snapshot;
       const created = new Date(summary.createdAt).toLocaleString();
       this.restoreDetails.textContent = `${created} · ${summary.tasks} tasks · ${summary.projects} projects · ${summary.tags} tags`;
@@ -179,8 +139,7 @@ window.SettingsComponent = {
     this.setDataBusy(true);
     this.setBackupStatus('Restoring backup…');
     try {
-      await this.ensureBackupServices();
-      await window.AppBackupService.restoreBackup(this.pendingRestoreSnapshot);
+      await AppBackupService.restoreBackup(this.pendingRestoreSnapshot);
     } catch (error) {
       this.restoreBusy = false;
       this.setDataBusy(false);
@@ -189,8 +148,8 @@ window.SettingsComponent = {
   },
 
   openModal(trigger = null) {
-    if (this.themeToggle) this.themeToggle.checked = window.AppState.theme === 'light';
-    window.ModalFocusManager.open(this.modal, {
+    if (this.themeToggle) this.themeToggle.checked = AppState.theme === 'light';
+    ModalFocusManager.open(this.modal, {
       trigger,
       initialFocus: this.themeToggle,
       fallbackFocus: trigger || this.openBtn || this.mobileOpenBtn
@@ -200,7 +159,7 @@ window.SettingsComponent = {
   closeModal() {
     if (this.restoreBusy) return;
     this.resetRestoreState(true);
-    window.ModalFocusManager.close(this.modal, {
+    ModalFocusManager.close(this.modal, {
       fallbackFocus: this.openBtn || this.mobileOpenBtn
     });
   }

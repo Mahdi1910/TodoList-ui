@@ -1,4 +1,10 @@
-Object.assign(window.AppDataService, {
+import { TodoStorageMappers } from './mappers.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoDb } from './db.js';
+import { TodoDbSchema } from './db-schema.js';
+import { TaxonomyOrder } from '../taxonomy-order.js';
+import { AppState } from '../state.js';
+export const DataServiceTaxonomyMethods = {
   nextEntitySortOrder(items = []) {
     const values = items.map(item => item.sortOrder).filter(Number.isFinite);
     return values.length ? Math.max(...values) + 1 : 0;
@@ -9,19 +15,19 @@ Object.assign(window.AppDataService, {
       const name = String(projectData.name || '').trim();
       if (!name) throw new Error('Project name is required.');
       const parentId = projectData.parentId || null;
-      if (parentId && !window.AppState.getProject(parentId)) throw new Error('Parent project not found.');
-      const now = window.TodoStorageMappers.nowIso();
+      if (parentId && !AppState.getProject(parentId)) throw new Error('Parent project not found.');
+      const now = TodoStorageMappers.nowIso();
       const project = {
         id: this.createId('project'), name, icon: projectData.icon || '●',
         viewType: projectData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        sortOrder: window.TaxonomyOrder.nextSortOrder('project', parentId), createdAt: now, updatedAt: now
+        sortOrder: TaxonomyOrder.nextSortOrder('project', parentId), createdAt: now, updatedAt: now
       };
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction(S.PROJECTS, 'readwrite', tx =>
-        window.TodoRepositories.add(tx, S.PROJECTS, project)
+      const S = TodoDbSchema.STORES;
+      await TodoDb.withTransaction(S.PROJECTS, 'readwrite', tx =>
+        TodoRepositories.add(tx, S.PROJECTS, project)
       );
-      window.AppStateSync.upsertTaxonomyEntity('project', project);
-      return window.AppState.getProject(project.id);
+      AppStateSync.upsertTaxonomyEntity('project', project);
+      return AppState.getProject(project.id);
     });
   },
 
@@ -31,26 +37,26 @@ Object.assign(window.AppDataService, {
 
   deleteProject(projectId) {
     return this.enqueue(async () => {
-      if (!window.AppState.getProject(projectId)) return false;
+      if (!AppState.getProject(projectId)) return false;
       const plan = this.prepareTaxonomyDelete('project', projectId);
-      const affectedTasks = window.AppState.tasks
+      const affectedTasks = AppState.tasks
         .filter(item => item.project === projectId)
         .map(item => ({ ...item, project: '', updatedAt: plan.now }));
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction([S.PROJECTS, S.TASKS], 'readwrite', async tx => {
+      const S = TodoDbSchema.STORES;
+      await TodoDb.withTransaction([S.PROJECTS, S.TASKS], 'readwrite', async tx => {
         for (const id of plan.changed) {
           const copy = plan.copies.get(id);
-          if (copy) await window.TodoRepositories.put(tx, S.PROJECTS, copy);
+          if (copy) await TodoRepositories.put(tx, S.PROJECTS, copy);
         }
-        const tasks = await window.TodoRepositories.getAllByIndex(tx, S.TASKS, 'by_project_id', projectId);
+        const tasks = await TodoRepositories.getAllByIndex(tx, S.TASKS, 'by_project_id', projectId);
         for (const task of tasks) {
-          await window.TodoRepositories.put(tx, S.TASKS, { ...task, projectId: null, updatedAt: plan.now });
+          await TodoRepositories.put(tx, S.TASKS, { ...task, projectId: null, updatedAt: plan.now });
         }
-        await window.TodoRepositories.remove(tx, S.PROJECTS, projectId);
+        await TodoRepositories.remove(tx, S.PROJECTS, projectId);
       });
       this.applyTaxonomyMemory('project', plan.copies, plan.changed);
-      window.AppStateSync.removeTaxonomyEntity('project', projectId);
-      window.AppStateSync.replaceTasks(affectedTasks);
+      AppStateSync.removeTaxonomyEntity('project', projectId);
+      AppStateSync.replaceTasks(affectedTasks);
       return true;
     });
   },
@@ -60,19 +66,19 @@ Object.assign(window.AppDataService, {
       const name = String(tagData.name || '').trim();
       if (!name) throw new Error('Tag name is required.');
       const parentId = tagData.parentId || null;
-      if (parentId && !window.AppState.getTag(parentId)) throw new Error('Parent tag not found.');
-      const now = window.TodoStorageMappers.nowIso();
+      if (parentId && !AppState.getTag(parentId)) throw new Error('Parent tag not found.');
+      const now = TodoStorageMappers.nowIso();
       const tag = {
         id: this.createId('tag'), name, icon: tagData.icon || '●',
         viewType: tagData.viewType === 'kanban' ? 'kanban' : 'list', parentId,
-        sortOrder: window.TaxonomyOrder.nextSortOrder('tag', parentId), createdAt: now, updatedAt: now
+        sortOrder: TaxonomyOrder.nextSortOrder('tag', parentId), createdAt: now, updatedAt: now
       };
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction(S.TAGS, 'readwrite', tx =>
-        window.TodoRepositories.add(tx, S.TAGS, tag)
+      const S = TodoDbSchema.STORES;
+      await TodoDb.withTransaction(S.TAGS, 'readwrite', tx =>
+        TodoRepositories.add(tx, S.TAGS, tag)
       );
-      window.AppStateSync.upsertTaxonomyEntity('tag', tag);
-      return window.AppState.getTag(tag.id);
+      AppStateSync.upsertTaxonomyEntity('tag', tag);
+      return AppState.getTag(tag.id);
     });
   },
 
@@ -82,23 +88,23 @@ Object.assign(window.AppDataService, {
 
   deleteTag(tagId) {
     return this.enqueue(async () => {
-      if (!window.AppState.getTag(tagId)) return false;
+      if (!AppState.getTag(tagId)) return false;
       const plan = this.prepareTaxonomyDelete('tag', tagId);
-      const affectedTasks = window.AppState.tasks
+      const affectedTasks = AppState.tasks
         .filter(task => (task.tags || []).includes(tagId))
         .map(task => ({ ...task, tags: (task.tags || []).filter(id => id !== tagId) }));
-      const S = window.TodoDbSchema.STORES;
-      await window.TodoDb.withTransaction([S.TAGS, S.TASK_TAGS], 'readwrite', async tx => {
+      const S = TodoDbSchema.STORES;
+      await TodoDb.withTransaction([S.TAGS, S.TASK_TAGS], 'readwrite', async tx => {
         for (const id of plan.changed) {
           const copy = plan.copies.get(id);
-          if (copy) await window.TodoRepositories.put(tx, S.TAGS, copy);
+          if (copy) await TodoRepositories.put(tx, S.TAGS, copy);
         }
-        await window.TodoRepositories.deleteByIndex(tx, S.TASK_TAGS, 'by_tag_id', tagId);
-        await window.TodoRepositories.remove(tx, S.TAGS, tagId);
+        await TodoRepositories.deleteByIndex(tx, S.TASK_TAGS, 'by_tag_id', tagId);
+        await TodoRepositories.remove(tx, S.TAGS, tagId);
       });
       this.applyTaxonomyMemory('tag', plan.copies, plan.changed);
-      window.AppStateSync.removeTaxonomyEntity('tag', tagId);
-      window.AppStateSync.replaceTasks(affectedTasks);
+      AppStateSync.removeTaxonomyEntity('tag', tagId);
+      AppStateSync.replaceTasks(affectedTasks);
       return true;
     });
   },
@@ -107,15 +113,15 @@ Object.assign(window.AppDataService, {
     return this.enqueue(async () => {
       const normalizedView = viewType === 'kanban' ? 'kanban' : 'list';
       const isProject = entityType === 'project';
-      const entity = isProject ? window.AppState.getProject(entityId) : window.AppState.getTag(entityId);
+      const entity = isProject ? AppState.getProject(entityId) : AppState.getTag(entityId);
       if (!entity) throw new Error(`${isProject ? 'Project' : 'Tag'} not found.`);
-      const updated = { ...entity, viewType: normalizedView, updatedAt: window.TodoStorageMappers.nowIso() };
-      const storeName = isProject ? window.TodoDbSchema.STORES.PROJECTS : window.TodoDbSchema.STORES.TAGS;
-      await window.TodoDb.withTransaction(storeName, 'readwrite', tx =>
-        window.TodoRepositories.put(tx, storeName, updated)
+      const updated = { ...entity, viewType: normalizedView, updatedAt: TodoStorageMappers.nowIso() };
+      const storeName = isProject ? TodoDbSchema.STORES.PROJECTS : TodoDbSchema.STORES.TAGS;
+      await TodoDb.withTransaction(storeName, 'readwrite', tx =>
+        TodoRepositories.put(tx, storeName, updated)
       );
-      window.AppStateSync.upsertTaxonomyEntity(isProject ? 'project' : 'tag', updated);
-      return isProject ? window.AppState.getProject(entityId) : window.AppState.getTag(entityId);
+      AppStateSync.upsertTaxonomyEntity(isProject ? 'project' : 'tag', updated);
+      return isProject ? AppState.getProject(entityId) : AppState.getTag(entityId);
     });
   }
-});
+};

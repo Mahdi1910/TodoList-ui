@@ -1,8 +1,10 @@
-window.TaxonomyOrder = (() => {
+import { AppState } from './state.js';
+
+export const TaxonomyOrder = (() => {
   const normalizeType = type => type === 'tag' ? 'tag' : 'project';
 
   function getItems(type) {
-    return normalizeType(type) === 'project' ? window.AppState.projects : window.AppState.tags;
+    return normalizeType(type) === 'project' ? AppState.projects : AppState.tags;
   }
 
   function getEntity(type, entityId) {

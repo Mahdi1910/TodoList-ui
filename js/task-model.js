@@ -1,4 +1,4 @@
-window.TaskModel = (() => {
+export const TaskModel = (() => {
   function normalizeTask(task = {}) {
     const source = task && typeof task === 'object' ? task : {};
     const now = new Date().toISOString();

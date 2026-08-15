@@ -1,4 +1,9 @@
-window.SidebarTaxonomyCore = (() => {
+import { ModalFocusManager } from './modal-focus.js';
+import { TaxonomyOrder } from '../taxonomy-order.js';
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const SidebarTaxonomyCore = (() => {
   const prop = (config, suffix) => `${config.entityType}${suffix}`;
   const selectedIconProp = config => `selected${config.stem}Icon`;
   const selectedViewProp = config => `selected${config.stem}View`;
@@ -30,7 +35,7 @@ window.SidebarTaxonomyCore = (() => {
     list.classList.add('sidebar-tree-root');
     list.dataset.taxonomyType = config.entityType;
     list.dataset.treeParentId = '';
-    window.TaxonomyOrder.getChildren(config.entityType, null)
+    TaxonomyOrder.getChildren(config.entityType, null)
       .forEach(entity => list.appendChild(createTreeNode(host, config, entity, 0)));
   }
   function createTreeNode(host, config, entity, depth = 0) {
@@ -59,7 +64,7 @@ window.SidebarTaxonomyCore = (() => {
     right.className = `${type}-nav-right`;
     const count = document.createElement('span');
     count.className = 'item-count';
-    count.textContent = window.AppState[countMethod(config)](entity.id);
+    count.textContent = AppState[countMethod(config)](entity.id);
     const more = document.createElement('button');
     more.type = 'button';
     more.className = `${type}-more-btn`;
@@ -90,7 +95,7 @@ window.SidebarTaxonomyCore = (() => {
     children.className = 'sidebar-tree-children';
     children.dataset.taxonomyType = type;
     children.dataset.treeParentId = entity.id;
-    window.TaxonomyOrder.getChildren(type, entity.id)
+    TaxonomyOrder.getChildren(type, entity.id)
       .forEach(child => children.appendChild(createTreeNode(host, config, child, depth + 1)));
     item.append(left, right, menu);
     node.append(item, children);
@@ -116,8 +121,8 @@ window.SidebarTaxonomyCore = (() => {
     none.value = '';
     none.textContent = config.topLevelLabel;
     select.appendChild(none);
-    window.TaxonomyOrder.flattenTree(config.entityType).forEach(({ item: candidate, depth }) => {
-      const isDescendant = entityId && window.AppState[descendantMethod(config)](candidate.id, entityId);
+    TaxonomyOrder.flattenTree(config.entityType).forEach(({ item: candidate, depth }) => {
+      const isDescendant = entityId && AppState[descendantMethod(config)](candidate.id, entityId);
       if (candidate.id === entityId || isDescendant) return;
       const option = document.createElement('option');
       option.value = candidate.id;
@@ -133,7 +138,7 @@ window.SidebarTaxonomyCore = (() => {
     const iconPicker = host[prop(config, 'IconPicker')];
     const modalTitle = host[prop(config, 'ModalTitle')];
     const saveBtn = host[prop(config, 'SaveBtn')];
-    const entity = entityId ? window.AppState[getMethod(config)](entityId) : null;
+    const entity = entityId ? AppState[getMethod(config)](entityId) : null;
     host[editingProp(config)] = entityId;
     host[selectedIconProp(config)] = entity?.icon || '●';
     host[selectedViewProp(config)] = entity?.viewType || 'list';
@@ -149,7 +154,7 @@ window.SidebarTaxonomyCore = (() => {
       button.classList.toggle('selected', button.dataset.icon === host[selectedIconProp(config)]));
     populateParentSelect(host, config, entityId, entity, parentId);
     setViewSelection(host, config, host[selectedViewProp(config)]);
-    window.ModalFocusManager.open(modal, {
+    ModalFocusManager.open(modal, {
       trigger: document.activeElement,
       initialFocus: nameInput,
       fallbackFocus: document.getElementById(`btn-add-${config.entityType}`) || host.toggleBtn
@@ -171,7 +176,7 @@ window.SidebarTaxonomyCore = (() => {
   }
   function closeModal(host, config) {
     const modal = host[prop(config, 'Modal')];
-    window.ModalFocusManager.close(modal, {
+    ModalFocusManager.close(modal, {
       fallbackFocus: document.getElementById(`btn-add-${config.entityType}`) || host.toggleBtn
     });
     document.body.classList.remove('modal-open');
@@ -200,24 +205,24 @@ window.SidebarTaxonomyCore = (() => {
     if (saveBtn) saveBtn.disabled = true;
     try {
       const editingId = host[editingProp(config)];
-      if (editingId) await window.AppDataService[serviceMethod(config, 'update')](editingId, data);
-      else await window.AppDataService[serviceMethod(config, 'create')](data);
+      if (editingId) await AppDataService[serviceMethod(config, 'update')](editingId, data);
+      else await AppDataService[serviceMethod(config, 'create')](data);
       closeModal(host, config);
       refreshAfterMutation(host, config);
     } catch (error) {
-      window.AppPersistence.reportError(`Could not save this ${config.entityType}.`, error);
+      AppPersistence.reportError(`Could not save this ${config.entityType}.`, error);
     } finally {
       if (saveBtn) saveBtn.disabled = false;
     }
   }
   async function remove(host, config, entityId) {
-    const entity = window.AppState[getMethod(config)](entityId);
+    const entity = AppState[getMethod(config)](entityId);
     if (!entity || !window.confirm(config.deletePrompt(entity.name))) return;
     try {
-      await window.AppDataService[serviceMethod(config, 'delete')](entityId);
+      await AppDataService[serviceMethod(config, 'delete')](entityId);
       refreshAfterMutation(host, config);
     } catch (error) {
-      window.AppPersistence.reportError(`Could not delete this ${config.entityType}.`, error);
+      AppPersistence.reportError(`Could not delete this ${config.entityType}.`, error);
     }
   }
   function bindEvents(host, config) {

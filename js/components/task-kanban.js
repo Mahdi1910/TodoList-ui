@@ -1,4 +1,4 @@
-window.TaskKanbanMethods = {
+export const TaskKanbanMethods = {
   renderKanban(tasks) {
     this.listViewEl.hidden = true;
     this.kanbanViewEl.hidden = false;

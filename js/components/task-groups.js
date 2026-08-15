@@ -1,4 +1,5 @@
-window.TaskGroupMethods = {
+import { AppState } from '../state.js';
+export const TaskGroupMethods = {
   getTaskGroups(tasks, groupKey) {
     if (groupKey === 'priority') return this.getPriorityGroups(tasks);
     if (groupKey === 'date') return this.getDateGroups(tasks);
@@ -47,7 +48,7 @@ window.TaskGroupMethods = {
     });
     const groups = [...byProject.entries()].map(([key, groupTasks]) => ({
       key,
-      label: key ? (window.AppState.getProject(key)?.name || 'Unknown Project') : 'Inbox',
+      label: key ? (AppState.getProject(key)?.name || 'Unknown Project') : 'Inbox',
       tasks: groupTasks
     }));
     return groups.sort((a, b) => {
@@ -69,7 +70,7 @@ window.TaskGroupMethods = {
     });
     const groups = [...byTag.entries()].map(([key, groupTasks]) => ({
       key,
-      label: key ? (window.AppState.getTag(key)?.name || 'Unknown Tag') : 'No Tags',
+      label: key ? (AppState.getTag(key)?.name || 'Unknown Tag') : 'No Tags',
       tasks: groupTasks
     }));
     return groups.sort((a, b) => {

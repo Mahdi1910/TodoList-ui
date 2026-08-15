@@ -1,4 +1,4 @@
-window.TaskDragTouchMethods = {
+export const TaskDragTouchMethods = {
   initTaskTouchDrag() {
     if (!this.dragWorkspace) return;
     this.touchDragPending = null;

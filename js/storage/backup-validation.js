@@ -1,4 +1,6 @@
-window.AppBackupValidation = (() => {
+import { TodoDbSchema } from './db-schema.js';
+
+export const AppBackupValidation = (() => {
   const FORMAT = 'TodoListBackup';
   const FORMAT_VERSION = 1;
   const DATA_VERSION = 1;
@@ -50,8 +52,8 @@ window.AppBackupValidation = (() => {
     if (snapshot.formatVersion !== FORMAT_VERSION) fail('This backup format version is not supported.');
     if (typeof snapshot.createdAt !== 'string' || !Number.isFinite(Date.parse(snapshot.createdAt))) fail('This backup has an invalid creation date.');
     if (!isObject(snapshot.database) || !isObject(snapshot.stores) || !isObject(snapshot.preferences)) fail('This backup is missing required metadata.');
-    if (snapshot.database.name !== window.TodoDbSchema.NAME) fail('This backup belongs to a different database.');
-    if (!Number.isInteger(snapshot.database.schemaVersion) || snapshot.database.schemaVersion > window.TodoDbSchema.VERSION) {
+    if (snapshot.database.name !== TodoDbSchema.NAME) fail('This backup belongs to a different database.');
+    if (!Number.isInteger(snapshot.database.schemaVersion) || snapshot.database.schemaVersion > TodoDbSchema.VERSION) {
       fail('This backup uses a newer unsupported database schema.');
     }
     if (!Number.isInteger(snapshot.database.dataVersion) || snapshot.database.dataVersion > DATA_VERSION) {
@@ -60,7 +62,7 @@ window.AppBackupValidation = (() => {
   }
 
   function validateStores(stores) {
-    const names = Object.values(window.TodoDbSchema.STORES);
+    const names = Object.values(TodoDbSchema.STORES);
     names.forEach(name => { if (!Array.isArray(stores[name])) fail(`Backup store "${name}" is missing or invalid.`); });
 
     const { projects, tags, tasks, task_tags: taskTags, reminder_definitions: definitions,

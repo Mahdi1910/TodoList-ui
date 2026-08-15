@@ -1,4 +1,5 @@
-window.TaskDragHierarchyMethods = {
+import { AppState } from '../state.js';
+export const TaskDragHierarchyMethods = {
   HIERARCHY_HYSTERESIS: 10,
 
   getRootCard(family) {
@@ -156,10 +157,10 @@ window.TaskDragHierarchyMethods = {
 
   isEligibleDragParent(parentId) {
     const session = this.dragSession;
-    const parent = window.AppState.getTask(parentId);
-    const dragged = window.AppState.getTask(session?.taskId);
+    const parent = AppState.getTask(parentId);
+    const dragged = AppState.getTask(session?.taskId);
     if (!parent || parent.parentTaskId || !dragged || parent.id === dragged.id) return false;
-    if (!dragged.parentTaskId && window.AppState.hasSubtasks(dragged.id)) return false;
+    if (!dragged.parentTaskId && AppState.hasSubtasks(dragged.id)) return false;
     return true;
   },
 
@@ -257,5 +258,3 @@ window.TaskDragHierarchyMethods = {
     });
   }
 };
-
-Object.assign(window.TaskDragMethods, window.TaskDragHierarchyMethods);

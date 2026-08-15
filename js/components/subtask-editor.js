@@ -1,4 +1,9 @@
-window.SubtaskEditorComponent = {
+import { ModalFocusManager } from './modal-focus.js';
+import { TaxonomyOrder } from '../taxonomy-order.js';
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const SubtaskEditorComponent = {
   editingSubtaskId: null,
   parentTaskId: null,
   selectedPriority: '',
@@ -235,7 +240,7 @@ window.SubtaskEditorComponent = {
   },
 
   openCreate(parentTaskId, trigger = null) {
-    const parent = window.AppState.validateParentTaskId(parentTaskId);
+    const parent = AppState.validateParentTaskId(parentTaskId);
     if (!parent) return;
     this.lastFocusedElement = trigger || document.activeElement;
     this.editingSubtaskId = null;
@@ -249,9 +254,9 @@ window.SubtaskEditorComponent = {
   },
 
   openEdit(subtaskId, trigger = null) {
-    const task = window.AppState.getTask(subtaskId);
+    const task = AppState.getTask(subtaskId);
     if (!task?.parentTaskId) return;
-    const parent = window.AppState.validateParentTaskId(task.parentTaskId);
+    const parent = AppState.validateParentTaskId(task.parentTaskId);
     if (!parent) return;
     this.lastFocusedElement = trigger || document.activeElement;
     this.editingSubtaskId = task.id;
@@ -273,14 +278,14 @@ window.SubtaskEditorComponent = {
   open(parent) {
     window.TasksComponent?.closeTaskActionMenu(false);
     this.parentLabel.textContent = `Parent: ${parent.title}`;
-    const project = parent.project ? window.AppState.getProject(parent.project) : null;
+    const project = parent.project ? AppState.getProject(parent.project) : null;
     this.projectLock.textContent = project ? `${project.icon} ${project.name} 🔑` : 'Inbox 🔑';
     this.renderTagMenu();
     this.syncPriorityUI();
     this.syncTagUI();
     this.syncScheduleUI();
     this.closeMenus();
-    window.ModalFocusManager.open(this.modal, {
+    ModalFocusManager.open(this.modal, {
       trigger: this.lastFocusedElement,
       initialFocus: this.titleInput,
       fallbackFocus: window.TasksComponent?.openAddTaskBtn
@@ -292,7 +297,7 @@ window.SubtaskEditorComponent = {
     if (!this.modal?.classList.contains('active')) return;
     this.cancelPendingDateOpen();
     this.closeMenus();
-    window.ModalFocusManager.close(this.modal, {
+    ModalFocusManager.close(this.modal, {
       fallbackFocus: window.TasksComponent?.openAddTaskBtn
     });
     if (this.card) this.card.style.marginBottom = '0px';
@@ -327,12 +332,12 @@ window.SubtaskEditorComponent = {
     };
     this.btnSubmit.disabled = true;
     try {
-      if (this.editingSubtaskId) await window.AppDataService.updateTask(this.editingSubtaskId, payload);
-      else await window.AppDataService.createTask({ ...payload, parentTaskId: this.parentTaskId });
+      if (this.editingSubtaskId) await AppDataService.updateTask(this.editingSubtaskId, payload);
+      else await AppDataService.createTask({ ...payload, parentTaskId: this.parentTaskId });
       this.close();
       window.TasksComponent?.refreshAfterTaskMutation();
     } catch (error) {
-      window.AppPersistence.reportError('Could not save this subtask. Your form has been kept open.', error);
+      AppPersistence.reportError('Could not save this subtask. Your form has been kept open.', error);
     } finally {
       this.btnSubmit.disabled = false;
     }
@@ -389,7 +394,7 @@ window.SubtaskEditorComponent = {
     if (!this.menuTags) return;
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
-      window.TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
+      TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
         const item = document.createElement('div');
         item.className = 'context-menu-item multiselect';
         item.dataset.subtaskTag = tag.id;
@@ -561,3 +566,5 @@ window.SubtaskEditorComponent = {
     return div.innerHTML;
   }
 };
+
+window.SubtaskEditorComponent = SubtaskEditorComponent;

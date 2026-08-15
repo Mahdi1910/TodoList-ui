@@ -1,5 +1,4 @@
-(() => {
-  window.TaskRelationMethods = {
+export const TaskRelationMethods = {
     getTask(taskId) {
       return this.tasks.find(task => task.id === taskId) || null;
     },
@@ -31,7 +30,4 @@
       if (!parent || parent.parentTaskId) return null;
       return parent;
     }
-  };
-
-  Object.assign(window.AppState, window.TaskRelationMethods);
-})();
+};

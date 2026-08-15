@@ -1,6 +1,10 @@
-window.TaskRendererMethods = {
+import { TaskFilter } from '../task-filter.js';
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const TaskRendererMethods = {
   render() {
-    const filtered = window.TaskFilter?.getDisplayTasks?.() || window.AppState.getFilteredTasks();
+    const filtered = TaskFilter?.getDisplayTasks?.() || AppState.getFilteredTasks();
     const viewType = window.WorkspaceControls?.viewType || 'list';
     if (viewType === 'kanban') this.renderKanban(filtered);
     else this.renderList(filtered);
@@ -131,11 +135,11 @@ window.TaskRendererMethods = {
     }
     if (normalized.priority) meta.appendChild(this.createBadge(normalized.priority, `priority-${normalized.priority}`));
     if (normalized.project && !hideProjectMeta) {
-      const projectName = window.AppState.getProject(normalized.project)?.name || 'Unknown Project';
+      const projectName = AppState.getProject(normalized.project)?.name || 'Unknown Project';
       meta.appendChild(this.createBadge(projectName));
     }
     normalized.tags.forEach(tagId => {
-      const tagName = window.AppState.getTag(tagId)?.name || 'Unknown Tag';
+      const tagName = AppState.getTag(tagId)?.name || 'Unknown Tag';
       meta.appendChild(this.createBadge(`#${tagName}`));
     });
     details.appendChild(meta);
@@ -163,12 +167,12 @@ window.TaskRendererMethods = {
       const requested = checkbox.checked;
       checkbox.disabled = true;
       try {
-        await window.AppDataService.toggleTaskStatus(normalized.id);
+        await AppDataService.toggleTaskStatus(normalized.id);
         this.refreshAfterTaskMutation();
       } catch (error) {
         checkbox.checked = !requested;
         checkbox.disabled = false;
-        window.AppPersistence.reportError('Could not save the task completion change.', error);
+        AppPersistence.reportError('Could not save the task completion change.', error);
       }
     });
     return card;

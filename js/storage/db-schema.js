@@ -1,4 +1,4 @@
-window.TodoDbSchema = (() => {
+export const TodoDbSchema = (() => {
   const NAME = 'TodoListDB';
   const VERSION = 1;
   const STORES = Object.freeze({

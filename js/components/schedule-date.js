@@ -1,4 +1,4 @@
-window.ScheduleDateMethods = {
+export const ScheduleDateMethods = {
   navigateMonth(delta) {
     const year = this.currentViewDate.getFullYear();
     const month = this.currentViewDate.getMonth();

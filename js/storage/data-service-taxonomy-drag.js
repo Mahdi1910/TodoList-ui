@@ -1,24 +1,30 @@
-Object.assign(window.AppDataService, {
+import { TodoStorageMappers } from './mappers.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoDb } from './db.js';
+import { TodoDbSchema } from './db-schema.js';
+import { TaxonomyOrder } from '../taxonomy-order.js';
+import { AppState } from '../state.js';
+export const DataServiceTaxonomyDragMethods = {
   taxonomyConfig(entityType) {
     if (!['project', 'tag'].includes(entityType)) throw new Error('Invalid taxonomy type.');
     const type = entityType;
     return {
       type,
-      items: type === 'project' ? window.AppState.projects : window.AppState.tags,
-      store: type === 'project' ? window.TodoDbSchema.STORES.PROJECTS : window.TodoDbSchema.STORES.TAGS,
+      items: type === 'project' ? AppState.projects : AppState.tags,
+      store: type === 'project' ? TodoDbSchema.STORES.PROJECTS : TodoDbSchema.STORES.TAGS,
       label: type === 'project' ? 'Project' : 'Tag'
     };
   },
 
   validateTaxonomyParent(entityType, entityId, parentId) {
     const config = this.taxonomyConfig(entityType);
-    const entity = window.TaxonomyOrder.getEntity(config.type, entityId);
+    const entity = TaxonomyOrder.getEntity(config.type, entityId);
     if (!entity) throw new Error(`${config.label} not found.`);
     if (!parentId) return { entity, parent: null, config };
-    const parent = window.TaxonomyOrder.getEntity(config.type, parentId);
+    const parent = TaxonomyOrder.getEntity(config.type, parentId);
     if (!parent) throw new Error(`Parent ${config.label.toLowerCase()} not found.`);
     if (parent.id === entity.id) throw new Error(`${config.label} cannot be its own parent.`);
-    const descendants = new Set(window.TaxonomyOrder.getDescendantIds(config.type, entity.id));
+    const descendants = new Set(TaxonomyOrder.getDescendantIds(config.type, entity.id));
     if (descendants.has(parent.id)) throw new Error(`${config.label} hierarchy cannot contain a cycle.`);
     return { entity, parent, config };
   },
@@ -30,7 +36,7 @@ Object.assign(window.AppDataService, {
 
   taxonomySiblingIds(entityType, parentId = null, excludeId = null, copies = null) {
     const source = copies ? [...copies.values()] : this.taxonomyConfig(entityType).items;
-    return window.TaxonomyOrder.getSiblingIds(entityType, parentId, excludeId, source);
+    return TaxonomyOrder.getSiblingIds(entityType, parentId, excludeId, source);
   },
 
   insertTaxonomyRelative(ids, entityId, beforeEntityId = null, afterEntityId = null) {
@@ -63,23 +69,23 @@ Object.assign(window.AppDataService, {
 
   async persistTaxonomyCopies(entityType, copies, changedIds) {
     const { store } = this.taxonomyConfig(entityType);
-    await window.TodoDb.withTransaction(store, 'readwrite', async tx => {
+    await TodoDb.withTransaction(store, 'readwrite', async tx => {
       for (const id of changedIds) {
         const copy = copies.get(id);
-        if (copy) await window.TodoRepositories.put(tx, store, copy);
+        if (copy) await TodoRepositories.put(tx, store, copy);
       }
     });
   },
 
   applyTaxonomyMemory(entityType, copies, changedIds) {
-    return window.AppStateSync.applyTaxonomyChanges(entityType, copies, changedIds);
+    return AppStateSync.applyTaxonomyChanges(entityType, copies, changedIds);
   },
 
   prepareTaxonomyDelete(entityType, entityId) {
     const { entity, config } = this.validateTaxonomyParent(entityType, entityId, null);
     const copies = this.taxonomyCopies(config.type);
     const changed = new Set();
-    const now = window.TodoStorageMappers.nowIso();
+    const now = TodoStorageMappers.nowIso();
     const sourceParentId = entity.parentId || null;
     const childIds = this.taxonomySiblingIds(config.type, entity.id, null, copies);
 
@@ -102,7 +108,7 @@ Object.assign(window.AppDataService, {
 
   async updateTaxonomyEntityWithOrder(entityType, entityId, data = {}) {
     const existingConfig = this.taxonomyConfig(entityType);
-    const existing = window.TaxonomyOrder.getEntity(existingConfig.type, entityId);
+    const existing = TaxonomyOrder.getEntity(existingConfig.type, entityId);
     if (!existing) throw new Error(`${existingConfig.label} not found.`);
     const targetParentId = data.parentId === undefined ? (existing.parentId || null) : (data.parentId || null);
     const { entity, config } = this.validateTaxonomyParent(entityType, entityId, targetParentId);
@@ -111,7 +117,7 @@ Object.assign(window.AppDataService, {
     const sourceParentId = entity.parentId || null;
     const copies = this.taxonomyCopies(config.type);
     const changed = new Set([entityId]);
-    const now = window.TodoStorageMappers.nowIso();
+    const now = TodoStorageMappers.nowIso();
     const moved = copies.get(entityId);
     const viewType = data.viewType === undefined
       ? (entity.viewType === 'kanban' ? 'kanban' : 'list')
@@ -135,7 +141,7 @@ Object.assign(window.AppDataService, {
 
     await this.persistTaxonomyCopies(config.type, copies, changed);
     this.applyTaxonomyMemory(config.type, copies, changed);
-    return window.TaxonomyOrder.getEntity(config.type, entityId);
+    return TaxonomyOrder.getEntity(config.type, entityId);
   },
 
   commitTaxonomyDrag({
@@ -150,7 +156,7 @@ Object.assign(window.AppDataService, {
       const sourceParentId = entity.parentId || null;
       const copies = this.taxonomyCopies(config.type);
       const changed = new Set();
-      const now = window.TodoStorageMappers.nowIso();
+      const now = TodoStorageMappers.nowIso();
       const sourceIds = this.taxonomySiblingIds(config.type, sourceParentId, entityId, copies);
       const destinationBase = sourceParentId === (targetParentId || null)
         ? sourceIds
@@ -164,7 +170,7 @@ Object.assign(window.AppDataService, {
 
       await this.persistTaxonomyCopies(config.type, copies, changed);
       this.applyTaxonomyMemory(config.type, copies, changed);
-      return window.TaxonomyOrder.getEntity(config.type, entityId);
+      return TaxonomyOrder.getEntity(config.type, entityId);
     });
   }
-});
+};

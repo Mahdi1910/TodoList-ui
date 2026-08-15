@@ -1,6 +1,12 @@
-Object.assign(window.AppDataService, {
+import { TodoStorageMappers } from './mappers.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoDb } from './db.js';
+import { TodoDbSchema } from './db-schema.js';
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+import { AppState } from '../state.js';
+export const DataServiceHierarchyMethods = {
   hierarchyScopeIds(parentTaskId = null, excludeTaskId = null) {
-    return window.AppState.getSiblingTaskIds(parentTaskId)
+    return AppState.getSiblingTaskIds(parentTaskId)
       .filter(id => id !== excludeTaskId);
   },
 
@@ -21,13 +27,13 @@ Object.assign(window.AppDataService, {
   },
 
   validateHierarchyLink(taskId, parentId) {
-    const task = window.AppState.getTask(taskId);
-    const parent = window.AppState.getTask(parentId);
+    const task = AppState.getTask(taskId);
+    const parent = AppState.getTask(parentId);
     if (!task) throw new Error('Task not found.');
     if (!parent || parent.parentTaskId) throw new Error('Parent must be a normal task.');
     if (parent.completed) throw new Error('Completed tasks cannot be used as parent tasks.');
     if (task.id === parent.id) throw new Error('A task cannot be its own parent.');
-    if (!task.parentTaskId && window.AppState.hasSubtasks(task.id)) {
+    if (!task.parentTaskId && AppState.hasSubtasks(task.id)) {
       throw new Error('Move or unlink this task’s subtasks first.');
     }
     return { task, parent };
@@ -47,17 +53,17 @@ Object.assign(window.AppDataService, {
     const changedTasks = [...changedIds]
       .map(id => copies.get(id))
       .filter(Boolean);
-    window.AppStateSync.replaceTasks(changedTasks);
+    AppStateSync.replaceTasks(changedTasks);
   },
 
   async persistHierarchyCopies(copies, changedIds, extraWork = null, storeNames = []) {
-    const S = window.TodoDbSchema.STORES;
+    const S = TodoDbSchema.STORES;
     const stores = [...new Set([S.TASKS, ...storeNames])];
-    await window.TodoDb.withTransaction(stores, 'readwrite', async tx => {
+    await TodoDb.withTransaction(stores, 'readwrite', async tx => {
       for (const id of changedIds) {
         const copy = copies.get(id);
         if (copy) {
-          await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(copy));
+          await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(copy));
         }
       }
       if (extraWork) await extraWork(tx);
@@ -68,9 +74,9 @@ Object.assign(window.AppDataService, {
     return this.enqueue(async () => {
       const { task, parent } = this.validateHierarchyLink(taskId, parentId);
       if (task.parentTaskId) throw new Error('Task is already linked to a parent.');
-      const copies = new Map(window.AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
+      const copies = new Map(AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
       const changed = new Set();
-      const now = window.TodoStorageMappers.nowIso();
+      const now = TodoStorageMappers.nowIso();
       const rootIds = this.hierarchyScopeIds(null, task.id);
       const childIds = [...this.hierarchyScopeIds(parent.id, task.id), task.id];
       const moved = copies.get(task.id);
@@ -83,18 +89,18 @@ Object.assign(window.AppDataService, {
       this.applyHierarchyScope(copies, parent.id, childIds, changed);
       await this.persistHierarchyCopies(copies, changed);
       this.applyHierarchyMemory(copies, changed);
-      return window.AppState.getTask(task.id);
+      return AppState.getTask(task.id);
     });
   },
 
   unlinkTask(taskId) {
     return this.enqueue(async () => {
-      const task = window.AppState.getTask(taskId);
+      const task = AppState.getTask(taskId);
       if (!task?.parentTaskId) throw new Error('Task is not linked to a parent.');
       const formerParentId = task.parentTaskId;
-      const copies = new Map(window.AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
+      const copies = new Map(AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
       const changed = new Set();
-      const now = window.TodoStorageMappers.nowIso();
+      const now = TodoStorageMappers.nowIso();
       const childIds = this.hierarchyScopeIds(formerParentId, task.id);
       const rootBase = this.hierarchyScopeIds(null, task.id);
       const rootIds = this.insertHierarchyRelative(rootBase, task.id, null, formerParentId);
@@ -107,7 +113,7 @@ Object.assign(window.AppDataService, {
       this.applyHierarchyScope(copies, null, rootIds, changed);
       await this.persistHierarchyCopies(copies, changed);
       this.applyHierarchyMemory(copies, changed);
-      return window.AppState.getTask(task.id);
+      return AppState.getTask(task.id);
     });
   },
 
@@ -122,7 +128,7 @@ Object.assign(window.AppDataService, {
     customOrderSnapshot = null
   } = {}) {
     return this.enqueue(async () => {
-      const task = window.AppState.getTask(taskId);
+      const task = AppState.getTask(taskId);
       if (!task) throw new Error('Task not found.');
       const sourceParentId = task.parentTaskId || null;
       let parent = null;
@@ -132,7 +138,7 @@ Object.assign(window.AppDataService, {
         targetParentId = null;
       }
 
-      const copies = new Map(window.AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
+      const copies = new Map(AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
       const changed = new Set();
       const normalizedCustomOrder = customOrderSnapshot
         ? this.applyCustomOrderSnapshot(copies, changed, customOrderSnapshot)
@@ -140,7 +146,7 @@ Object.assign(window.AppDataService, {
       const scopeIds = (parentId, excludeId = null) => normalizedCustomOrder
         ? this.getCustomOrderScopeIds(normalizedCustomOrder, parentId, excludeId)
         : this.hierarchyScopeIds(parentId, excludeId);
-      const now = window.TodoStorageMappers.nowIso();
+      const now = TodoStorageMappers.nowIso();
       const moved = copies.get(task.id);
       const sourceIds = scopeIds(sourceParentId, task.id);
       const targetBase = sourceParentId === targetParentId
@@ -178,10 +184,10 @@ Object.assign(window.AppDataService, {
           moved.priority = key;
         } else if (destinationContext.groupType === 'date') {
           const nextDate = moved.repeat && moved.repeat.mode !== 'none'
-            ? (key || window.RepeatEngine.today())
+            ? (key || RepeatEngine.today())
             : (key || null);
           if (moved.dueDate !== nextDate && moved.repeat && moved.repeat.mode !== 'none') {
-            moved.repeatState = window.RepeatEngine.createInitialRepeatState(moved.repeat, nextDate, {
+            moved.repeatState = RepeatEngine.createInitialRepeatState(moved.repeat, nextDate, {
               seriesId: this.createId('series'), occurrenceNumber: 1
             });
             repeatStateChanged = true;
@@ -206,8 +212,8 @@ Object.assign(window.AppDataService, {
       }
 
       if (targetLevel === 'subtask') moved.project = parent.project || '';
-      if (targetLevel === 'root' && rootProjectChanged && window.AppState.hasSubtasks(task.id)) {
-        window.AppState.getSubtasks(task.id).forEach(child => {
+      if (targetLevel === 'root' && rootProjectChanged && AppState.hasSubtasks(task.id)) {
+        AppState.getSubtasks(task.id).forEach(child => {
           const childCopy = copies.get(child.id);
           childCopy.project = moved.project;
           childCopy.updatedAt = now;
@@ -215,29 +221,29 @@ Object.assign(window.AppDataService, {
         });
       }
 
-      const S = window.TodoDbSchema.STORES;
+      const S = TodoDbSchema.STORES;
       const extraStores = [S.APP_SETTINGS];
       if (tagChanged) extraStores.push(S.TASK_TAGS);
       if (repeatStateChanged) extraStores.push(S.TASK_REPEAT_RULES);
       await this.persistHierarchyCopies(copies, changed, async tx => {
         if (tagChanged) {
-          await window.TodoRepositories.replaceRelations(
+          await TodoRepositories.replaceRelations(
             tx, S.TASK_TAGS, 'by_task_id', task.id,
             nextTags.map(tagId => ({ taskId: task.id, tagId }))
           );
         }
         if (repeatStateChanged) {
-          await window.TodoRepositories.put(
+          await TodoRepositories.put(
             tx, S.TASK_REPEAT_RULES,
-            window.TodoStorageMappers.repeatToRow(moved.id, moved.repeat, moved.repeatState)
+            TodoStorageMappers.repeatToRow(moved.id, moved.repeat, moved.repeatState)
           );
         }
-        await window.TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
+        await TodoRepositories.put(tx, S.APP_SETTINGS, { key: 'sortKey', value: 'custom' });
       }, extraStores);
 
       this.applyHierarchyMemory(copies, changed);
-      window.AppStateSync.setSetting('sortKey', 'custom');
-      return window.AppState.getTask(task.id);
+      AppStateSync.setSetting('sortKey', 'custom');
+      return AppState.getTask(task.id);
     });
   }
-});
+};

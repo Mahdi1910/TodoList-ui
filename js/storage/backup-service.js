@@ -1,12 +1,18 @@
-window.AppBackupService = (() => {
-  const schema = () => window.TodoDbSchema;
-  const repo = () => window.TodoRepositories;
-  const validation = () => window.AppBackupValidation;
+import { TodoDbSchema } from './db-schema.js';
+import { TodoDb } from './db.js';
+import { TodoRepositories } from './repositories.js';
+import { AppDataService } from './data-service.js';
+import { AppBackupValidation } from './backup-validation.js';
+
+export const AppBackupService = (() => {
+  const schema = () => TodoDbSchema;
+  const repo = () => TodoRepositories;
+  const validation = () => AppBackupValidation;
   const storeNames = () => Object.values(schema().STORES);
 
   async function readRawStores() {
     const names = storeNames();
-    return window.TodoDb.withTransaction(names, 'readonly', async tx => {
+    return TodoDb.withTransaction(names, 'readonly', async tx => {
       const rows = await Promise.all(names.map(name => repo().getAll(tx, name)));
       return Object.fromEntries(names.map((name, index) => [name, rows[index]]));
     });
@@ -17,7 +23,7 @@ window.AppBackupService = (() => {
   }
 
   async function createSnapshot() {
-    await window.AppDataService.whenIdle();
+    await AppDataService.whenIdle();
     const stores = await readRawStores();
     const dataVersionRow = stores[schema().STORES.APP_META]
       .find(row => row.key === 'dataVersion');
@@ -96,12 +102,12 @@ window.AppBackupService = (() => {
 
   async function restoreBackup(input) {
     const snapshot = validateBackup(input);
-    await window.AppDataService.whenIdle();
+    await AppDataService.whenIdle();
     const names = storeNames();
     const metaStore = schema().STORES.APP_META;
     const restoredStores = { ...snapshot.stores, [metaStore]: normalizedMetaRows(snapshot) };
 
-    await window.TodoDb.withTransaction(names, 'readwrite', async tx => {
+    await TodoDb.withTransaction(names, 'readwrite', async tx => {
       await Promise.all(names.map(name => repo().clear(tx, name)));
       for (const name of names) {
         await repo().putMany(tx, name, restoredStores[name]);

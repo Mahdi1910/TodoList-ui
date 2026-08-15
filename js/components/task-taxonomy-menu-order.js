@@ -1,4 +1,5 @@
-window.TaskTaxonomyMenuOrderMethods = {
+import { TaxonomyOrder } from '../taxonomy-order.js';
+export const TaskTaxonomyMenuOrderMethods = {
   renderProjectMenu() {
     if (!this.menuProject) return;
     this.menuProject.innerHTML = '';
@@ -12,7 +13,7 @@ window.TaskTaxonomyMenuOrderMethods = {
     inboxItem.setAttribute('aria-selected', this.selectedProject === '' ? 'true' : 'false');
     this.menuProject.appendChild(inboxItem);
 
-    window.TaxonomyOrder.flattenTree('project').forEach(({ item: project }) => {
+    TaxonomyOrder.flattenTree('project').forEach(({ item: project }) => {
       this.menuProject.appendChild(this.createProjectMenuItem(project));
     });
   },
@@ -21,7 +22,7 @@ window.TaskTaxonomyMenuOrderMethods = {
     if (!this.menuTags) return;
     this.menuTags.innerHTML = '';
     const renderLevel = (parentId, depth = 0) => {
-      window.TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
+      TaxonomyOrder.getChildren('tag', parentId).forEach(tag => {
         this.menuTags.appendChild(this.createTagMenuItem(tag, depth));
         renderLevel(tag.id, depth + 1);
       });
@@ -30,6 +31,3 @@ window.TaskTaxonomyMenuOrderMethods = {
     this.bindTagMenuItems();
   }
 };
-
-Object.assign(window.TaskMenuMethods, window.TaskTaxonomyMenuOrderMethods);
-Object.assign(window.TasksComponent, window.TaskTaxonomyMenuOrderMethods);

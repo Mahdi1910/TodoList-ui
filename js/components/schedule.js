@@ -1,3 +1,14 @@
+import { ModalFocusManager } from './modal-focus.js';
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+import { ScheduleEventMethods } from './schedule-events.js';
+import { ScheduleDateMethods } from './schedule-date.js';
+import { ScheduleWheelMethods } from './schedule-wheels.js';
+import { ScheduleTimeReminderMethods } from './schedule-time-reminders.js';
+import { ScheduleRepeatMethods } from './schedule-repeat.js';
+import { ScheduleRepeatCalendarMethods } from './schedule-repeat-calendar.js';
+import { ScheduleRepeatEndMethods } from './schedule-repeat-end.js';
+import { ScheduleRepeatValidationMethods } from './schedule-repeat-validation.js';
+
 /**
  * Schedule Component Manager
  * Modal lifecycle, draft state (Date, Time, Reminders), calendar rendering engine,
@@ -5,7 +16,7 @@
  * accessibility focus trap, and Apply/Cancel callbacks.
  */
 
-window.ScheduleComponent = {
+const ScheduleCore = {
   activeTab: 'date', // 'date' | 'time' | 'repeat'
   currentViewDate: new Date(),
   draftDate: null, // "YYYY-MM-DD" string or null
@@ -118,6 +129,7 @@ window.ScheduleComponent = {
     } else {
       this.draftRepeat = { mode: 'none', custom: { interval: 1, unit: 'day', weekdays: [], monthDays: [], yearDates: {} } };
     }
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
 
     // Set view date to selected date or current date
     if (this.draftDate) {
@@ -130,8 +142,9 @@ window.ScheduleComponent = {
     this.switchTab('date');
     this.renderCalendar();
     this.updateReminderUI();
+    this.renderRepeatEndRow?.();
 
-    window.ModalFocusManager.open(this.modalEl, {
+    ModalFocusManager.open(this.modalEl, {
       trigger: this.lastFocusedElement,
       initialFocus: () => this.gridEl?.querySelector('.calendar-day.selected') ||
                           this.gridEl?.querySelector('.calendar-day.today') ||
@@ -150,7 +163,7 @@ window.ScheduleComponent = {
     this.closeReminderMenu();
     const afterClose = this.afterCloseCallback;
     this.afterCloseCallback = null;
-    const closed = window.ModalFocusManager.close(this.modalEl, {
+    const closed = ModalFocusManager.close(this.modalEl, {
       fallbackFocus: this.lastFocusedElement
     });
     this.lastFocusedElement = null;
@@ -158,6 +171,23 @@ window.ScheduleComponent = {
   },
 
   apply() {
+    this.draftRepeat = RepeatEngine.normalizeRepeatRule(this.draftRepeat);
+    if (this.draftRepeat.mode !== 'none' && !this.draftDate) this.selectDate(RepeatEngine.today());
+    const check = RepeatEngine.validateRepeatRule(this.draftRepeat);
+    if (!check.valid) {
+      this.switchTab('repeat');
+      return this.showRepeatValidationError(check.message);
+    }
+    if (check.repeat.end.type === 'date') {
+      const start = this.draftDate || RepeatEngine.today();
+      if (check.repeat.end.date < start) {
+        this.switchTab('repeat');
+        return this.showRepeatValidationError('Repeat end date cannot be before the task date.');
+      }
+    }
+    this.clearRepeatValidationError();
+    this.draftRepeat = check.repeat;
+
     if (typeof this.onApplyCallback === 'function') {
       const formattedTime = this.draftTime
         ? `${this.draftTime.hour}:${this.draftTime.minute} ${this.draftTime.period}`
@@ -177,6 +207,7 @@ window.ScheduleComponent = {
       });
     }
     this.close(false);
+    return true;
   },
 
   escapeText(value) {
@@ -227,7 +258,17 @@ window.ScheduleComponent = {
   }
 
 };
-Object.assign(window.ScheduleComponent,
-  window.ScheduleEventMethods, window.ScheduleDateMethods, window.ScheduleWheelMethods,
-  window.ScheduleTimeReminderMethods, window.ScheduleRepeatMethods, window.ScheduleRepeatCalendarMethods
-);
+
+export const ScheduleComponent = {
+  ...ScheduleCore,
+  ...ScheduleEventMethods,
+  ...ScheduleDateMethods,
+  ...ScheduleWheelMethods,
+  ...ScheduleTimeReminderMethods,
+  ...ScheduleRepeatMethods,
+  ...ScheduleRepeatCalendarMethods,
+  ...ScheduleRepeatEndMethods,
+  ...ScheduleRepeatValidationMethods
+};
+
+window.ScheduleComponent = ScheduleComponent;

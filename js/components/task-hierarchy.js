@@ -1,4 +1,5 @@
-window.TaskHierarchyMethods = {
+import { AppState } from '../state.js';
+export const TaskHierarchyMethods = {
   initTaskHierarchy() {
     this.collapsedSubtaskParents = this.collapsedSubtaskParents || new Set();
     this.subtaskFamilyRenderSeq = 0;
@@ -18,8 +19,8 @@ window.TaskHierarchyMethods = {
 
   createTaskFamily(parentTask) {
     const parent = parentTask;
-    const children = window.WorkspaceControls?.sortTasks(window.AppState.getSubtasks(parent.id))
-      || window.AppState.getSubtasks(parent.id);
+    const children = window.WorkspaceControls?.sortTasks(AppState.getSubtasks(parent.id))
+      || AppState.getSubtasks(parent.id);
     const family = document.createElement('div');
     family.className = 'task-family';
     family.dataset.parentId = parent.id;
@@ -90,7 +91,7 @@ window.TaskHierarchyMethods = {
       if (button) {
         button.textContent = collapsed ? '›' : '⌄';
         button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        const parent = window.AppState.getTask(parentTaskId);
+        const parent = AppState.getTask(parentTaskId);
         button.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} subtasks for ${parent?.title || 'task'}`);
       }
     });
@@ -98,15 +99,15 @@ window.TaskHierarchyMethods = {
 
   renderParentEditSubtasks() {
     if (!this.parentSubtasksSection || !this.parentSubtasksList) return;
-    const parent = this.editingTaskId ? window.AppState.getTask(this.editingTaskId) : null;
+    const parent = this.editingTaskId ? AppState.getTask(this.editingTaskId) : null;
     if (!parent || parent.parentTaskId) {
       this.parentSubtasksSection.hidden = true;
       this.parentSubtasksList.innerHTML = '';
       return;
     }
 
-    const children = window.WorkspaceControls?.sortTasks(window.AppState.getSubtasks(parent.id))
-      || window.AppState.getSubtasks(parent.id);
+    const children = window.WorkspaceControls?.sortTasks(AppState.getSubtasks(parent.id))
+      || AppState.getSubtasks(parent.id);
     this.parentSubtasksSection.hidden = false;
     this.parentSubtasksCount.textContent = String(children.length);
     this.parentSubtasksList.innerHTML = '';

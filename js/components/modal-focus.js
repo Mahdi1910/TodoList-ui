@@ -1,4 +1,4 @@
-window.ModalFocusManager = (() => {
+export const ModalFocusManager = (() => {
   const records = new WeakMap();
   const stack = [];
   let initialized = false;

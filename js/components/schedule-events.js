@@ -1,4 +1,4 @@
-window.ScheduleEventMethods = {
+export const ScheduleEventMethods = {
   bindEvents() {
     // Tabs
     this.tabDate?.addEventListener('click', () => this.switchTab('date'));

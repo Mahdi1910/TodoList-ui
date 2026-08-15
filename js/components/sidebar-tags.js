@@ -1,4 +1,6 @@
-window.SidebarTagConfig = Object.freeze({
+import { SidebarTaxonomyCore } from './sidebar-taxonomy-core.js';
+
+export const SidebarTagConfig = Object.freeze({
   entityType: 'tag',
   stem: 'Tag',
   pluralStem: 'Tags',
@@ -7,4 +9,4 @@ window.SidebarTagConfig = Object.freeze({
   deletePrompt: name => `Delete tag "${name}"? Child tags will become top-level tags.`
 });
 
-window.SidebarTagMethods = window.SidebarTaxonomyCore.createMethods(window.SidebarTagConfig);
+export const SidebarTagMethods = SidebarTaxonomyCore.createMethods(SidebarTagConfig);

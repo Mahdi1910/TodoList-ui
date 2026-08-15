@@ -1,4 +1,6 @@
-window.SidebarProjectConfig = Object.freeze({
+import { SidebarTaxonomyCore } from './sidebar-taxonomy-core.js';
+
+export const SidebarProjectConfig = Object.freeze({
   entityType: 'project',
   stem: 'Project',
   pluralStem: 'Projects',
@@ -7,4 +9,4 @@ window.SidebarProjectConfig = Object.freeze({
   deletePrompt: name => `Delete project "${name}"? Its direct sub-projects will become top-level.`
 });
 
-window.SidebarProjectMethods = window.SidebarTaxonomyCore.createMethods(window.SidebarProjectConfig);
+export const SidebarProjectMethods = SidebarTaxonomyCore.createMethods(SidebarProjectConfig);

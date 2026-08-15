@@ -1,4 +1,4 @@
-window.SidebarTaxonomyDragTouchMethods = {
+export const SidebarTaxonomyDragTouchMethods = {
   initTaxonomyTouchDrag() {
     this.taxonomyTouchPending = null;
     this.sidebarEl.addEventListener('touchstart', e => this.onTaxonomyTouchStart(e), { passive: true });

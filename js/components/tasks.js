@@ -1,4 +1,20 @@
-window.TasksComponent = {
+import { ModalFocusManager } from './modal-focus.js';
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+import { TaskMenuMethods } from './task-menus.js';
+import { TaskTaxonomyMenuOrderMethods } from './task-taxonomy-menu-order.js';
+import { TaskActionMethods } from './task-actions.js';
+import { TaskGroupMethods } from './task-groups.js';
+import { TaskHierarchyMethods } from './task-hierarchy.js';
+import { TaskKanbanMethods } from './task-kanban.js';
+import { TaskDragMethods } from './task-drag.js';
+import { TaskDragHierarchyMethods } from './task-drag-hierarchy.js';
+import { TaskDragTouchMethods } from './task-drag-touch.js';
+import { TaskDragCommitMethods } from './task-drag-commit.js';
+import { TaskRendererMethods } from './task-renderer.js';
+
+const TasksCore = {
   editingTaskId: null,
   selectedPriority: '',
   selectedProject: '',
@@ -244,7 +260,7 @@ window.TasksComponent = {
     });
     this.addTaskModal?.addEventListener('keydown', e => this.handleModalKeydown(e));
     this.btnAddSubtask?.addEventListener('click', () => {
-      const parent = this.editingTaskId ? window.AppState.getTask(this.editingTaskId) : null;
+      const parent = this.editingTaskId ? AppState.getTask(this.editingTaskId) : null;
       if (!parent || parent.parentTaskId) return;
       this.closeAllContextMenus();
       window.SubtaskEditorComponent?.openCreate(parent.id, this.btnAddSubtask);
@@ -359,12 +375,12 @@ window.TasksComponent = {
     };
     this.submitTaskBtn.disabled = true;
     try {
-      if (this.editingTaskId) await window.AppDataService.updateTask(this.editingTaskId, payload);
-      else await window.AppDataService.createTask({ ...payload, parentTaskId: null });
+      if (this.editingTaskId) await AppDataService.updateTask(this.editingTaskId, payload);
+      else await AppDataService.createTask({ ...payload, parentTaskId: null });
       this.closeModal();
       this.render();
     } catch (error) {
-      window.AppPersistence.reportError('Could not save this task. Your form has been kept open.', error);
+      AppPersistence.reportError('Could not save this task. Your form has been kept open.', error);
     } finally {
       this.submitTaskBtn.disabled = false;
     }
@@ -376,10 +392,10 @@ window.TasksComponent = {
     this.selectedTags = [];
     this.selectedDueDate = null;
     if (useCurrentContext) {
-      if (window.AppState.currentFilterType === 'project') this.selectedProject = window.AppState.currentFilter;
-      else if (window.AppState.currentFilterType === 'tag') this.selectedTags = [window.AppState.currentFilter];
-      else if (window.AppState.currentFilterType === 'smart' && window.AppState.currentFilter === 'today') {
-        this.selectedDueDate = window.AppState.getTodayDateStr();
+      if (AppState.currentFilterType === 'project') this.selectedProject = AppState.currentFilter;
+      else if (AppState.currentFilterType === 'tag') this.selectedTags = [AppState.currentFilter];
+      else if (AppState.currentFilterType === 'smart' && AppState.currentFilter === 'today') {
+        this.selectedDueDate = AppState.getTodayDateStr();
       }
     }
     this.selectedDueTime = null;
@@ -390,7 +406,7 @@ window.TasksComponent = {
   },
 
   openModal(taskToEdit = null) {
-    if (taskToEdit && window.AppState.isSubtask(taskToEdit)) {
+    if (taskToEdit && AppState.isSubtask(taskToEdit)) {
       window.SubtaskEditorComponent?.openEdit(taskToEdit.id);
       return;
     }
@@ -425,7 +441,7 @@ window.TasksComponent = {
       this.submitTaskBtn.setAttribute('aria-label', 'Add Task');
     }
 
-    window.ModalFocusManager.open(this.addTaskModal, {
+    ModalFocusManager.open(this.addTaskModal, {
       trigger: this.lastFocusedElement,
       initialFocus: this.titleInput,
       fallbackFocus: this.openAddTaskBtn
@@ -438,7 +454,7 @@ window.TasksComponent = {
     this.cancelPendingDateOpen();
     this.closeAllContextMenus();
     this.closeTaskActionMenu(false);
-    window.ModalFocusManager.close(this.addTaskModal, {
+    ModalFocusManager.close(this.addTaskModal, {
       fallbackFocus: this.openAddTaskBtn
     });
     this.resetQuickInputViewport();
@@ -461,15 +477,19 @@ window.TasksComponent = {
   }
 };
 
-Object.assign(
-  window.TasksComponent,
-  window.TaskMenuMethods,
-  window.TaskActionMethods,
-  window.TaskGroupMethods,
-  window.TaskHierarchyMethods,
-  window.TaskKanbanMethods,
-  window.TaskDragMethods,
-  window.TaskDragTouchMethods,
-  window.TaskDragCommitMethods,
-  window.TaskRendererMethods
-);
+export const TasksComponent = {
+  ...TasksCore,
+  ...TaskMenuMethods,
+  ...TaskTaxonomyMenuOrderMethods,
+  ...TaskActionMethods,
+  ...TaskGroupMethods,
+  ...TaskHierarchyMethods,
+  ...TaskKanbanMethods,
+  ...TaskDragMethods,
+  ...TaskDragHierarchyMethods,
+  ...TaskDragTouchMethods,
+  ...TaskDragCommitMethods,
+  ...TaskRendererMethods
+};
+
+window.TasksComponent = TasksComponent;

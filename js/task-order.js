@@ -1,4 +1,4 @@
-window.TaskOrderMethods = {
+export const TaskOrderMethods = {
   compareTaskOrder(a, b) {
     return (a.sortOrder - b.sortOrder) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
   },
@@ -56,5 +56,3 @@ window.TaskOrderMethods = {
     return this.getRootTaskIds();
   }
 };
-
-Object.assign(window.AppState, window.TaskOrderMethods);

@@ -1,6 +1,8 @@
-(() => {
-  const seedTime = new Date().toISOString();
-  window.AppSeedData = {
+import { TaskRelationMethods } from './task-relations.js';
+import { TaskOrderMethods } from './task-order.js';
+
+const seedTime = new Date().toISOString();
+export const AppSeedData = {
     projects: [
       { id: 'personal', name: 'Personal', icon: '●', viewType: 'list', parentId: null },
       { id: 'work', name: 'Work', icon: '◆', viewType: 'list', parentId: null }
@@ -21,10 +23,9 @@
         project: 'work', priority: 'medium', tags: ['urgent'], completed: true, createdAt: seedTime
       }
     ]
-  };
-})();
+};
 
-window.AppState = {
+const AppStateCore = {
   theme: 'dark',
   isSidebarCollapsed: false,
   currentFilter: 'inbox',
@@ -34,10 +35,6 @@ window.AppState = {
   tasks: [],
   reminderDefinitions: [],
   settings: { sortKey: 'custom', sortDirection: 'asc', groupKey: 'none' },
-
-  hydrate(data = {}) {
-    return window.AppStateSync.hydrate(data);
-  },
 
   getProject(projectId) {
     return this.projects.find(project => project.id === projectId) || null;
@@ -162,4 +159,11 @@ window.AppState = {
     const ids = this.getTagTreeTaskIds(tagId);
     return this.tasks.filter(task => !task.completed && (task.tags || []).some(id => ids.includes(id))).length;
   }
+
+};
+
+export const AppState = {
+  ...AppStateCore,
+  ...TaskRelationMethods,
+  ...TaskOrderMethods
 };

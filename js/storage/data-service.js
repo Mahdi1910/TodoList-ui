@@ -1,5 +1,21 @@
+import { RepeatEngine } from '../repeat/repeat-engine.js';
+import { TaskModel } from '../task-model.js';
+import { AppState } from '../state.js';
+import { AppStateSync } from '../state-sync.js';
+import { TodoDbSchema } from './db-schema.js';
+import { TodoDb } from './db.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoStorageMappers } from './mappers.js';
+import { DataServiceTaxonomyMethods } from './data-service-taxonomy.js';
+import { DataServiceReminderMethods } from './data-service-reminders.js';
+import { DataServiceTaxonomyDragMethods } from './data-service-taxonomy-drag.js';
+import { DataServiceDragMethods } from './data-service-drag.js';
+import { DataServiceHierarchyMethods } from './data-service-hierarchy.js';
+
+let AppDataService;
+
 (() => {
-  const engine = () => window.RepeatEngine;
+  const engine = () => RepeatEngine;
 
   function copyTask(task, overrides = {}) {
     return {
@@ -26,21 +42,21 @@
   }
 
   function replaceTaskMemory(copies, additions = []) {
-    window.AppStateSync.replaceTasks(copies, additions);
+    AppStateSync.replaceTasks(copies, additions);
   }
 
   async function persistTaskRows(tasks) {
-    const S = window.TodoDbSchema.STORES;
-    await window.TodoDb.withTransaction(S.TASKS, 'readwrite', async tx => {
+    const S = TodoDbSchema.STORES;
+    await TodoDb.withTransaction(S.TASKS, 'readwrite', async tx => {
       for (const task of tasks) {
-        await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(task));
+        await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(task));
       }
     });
   }
 
   async function persistTaskAggregates(service, tasks) {
-    const S = window.TodoDbSchema.STORES;
-    await window.TodoDb.withTransaction([
+    const S = TodoDbSchema.STORES;
+    await TodoDb.withTransaction([
       S.TASKS, S.TASK_TAGS, S.REMINDER_DEFINITIONS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
     ], 'readwrite', async tx => {
       for (const task of tasks) await service.writeTaskAggregate(tx, task, []);
@@ -68,21 +84,21 @@
   }
 
   async function uncompleteTask(task) {
-    const updated = copyTask(task, { completed: false, updatedAt: window.TodoStorageMappers.nowIso() });
+    const updated = copyTask(task, { completed: false, updatedAt: TodoStorageMappers.nowIso() });
     await persistTaskRows([updated]);
     replaceTaskMemory([updated]);
     return updated;
   }
 
   async function completePlainSubtask(task) {
-    const updated = copyTask(task, { completed: true, updatedAt: window.TodoStorageMappers.nowIso() });
+    const updated = copyTask(task, { completed: true, updatedAt: TodoStorageMappers.nowIso() });
     await persistTaskRows([updated]);
     replaceTaskMemory([updated]);
     return updated;
   }
 
   async function completeRepeatingSubtask(service, task) {
-    const now = window.TodoStorageMappers.nowIso();
+    const now = TodoStorageMappers.nowIso();
     const slot = task.familySlotId || service.createId('slot');
     const nextDate = engine().calculateNextOccurrence(task.dueDate, task.repeat, task.repeatState || {});
     const oldTask = copyTask(task, {
@@ -115,8 +131,8 @@
   }
 
   async function completeNonRepeatingRoot(root) {
-    const now = window.TodoStorageMappers.nowIso();
-    const family = [root, ...window.AppState.getSubtasks(root.id)].map(task =>
+    const now = TodoStorageMappers.nowIso();
+    const family = [root, ...AppState.getSubtasks(root.id)].map(task =>
       copyTask(task, { completed: true, updatedAt: now }));
     await persistTaskRows(family);
     replaceTaskMemory(family);
@@ -124,7 +140,7 @@
   }
 
   async function finishRepeatingRootWithoutNext(service, root, children) {
-    const now = window.TodoStorageMappers.nowIso();
+    const now = TodoStorageMappers.nowIso();
     const oldRoot = copyTask(root, {
       completed: true,
       repeat: null,
@@ -142,11 +158,11 @@
   }
 
   async function completeRepeatingRoot(service, root) {
-    const children = window.AppState.getSubtasks(root.id).map(child => copyTask(child));
+    const children = AppState.getSubtasks(root.id).map(child => copyTask(child));
     const nextDate = engine().calculateNextOccurrence(root.dueDate, root.repeat, root.repeatState || {});
     if (!nextDate) return finishRepeatingRootWithoutNext(service, root, children);
 
-    const now = window.TodoStorageMappers.nowIso();
+    const now = TodoStorageMappers.nowIso();
     const oldRoot = copyTask(root, {
       completed: true,
       repeat: null,
@@ -194,7 +210,7 @@
     return nextRoot;
   }
 
-  window.AppDataService = {
+  const AppDataServiceCore = {
     _writeQueue: Promise.resolve(),
 
     enqueue(work) {
@@ -216,31 +232,31 @@
 
     validateProjectId(projectId) {
       if (!projectId) return '';
-      if (!window.AppState.getProject(projectId)) throw new Error('The selected project no longer exists.');
+      if (!AppState.getProject(projectId)) throw new Error('The selected project no longer exists.');
       return projectId;
     },
 
     validateTagIds(tagIds = []) {
       return [...new Set(tagIds)].filter(Boolean).map(tagId => {
-        if (!window.AppState.getTag(tagId)) throw new Error('A selected tag no longer exists.');
+        if (!AppState.getTag(tagId)) throw new Error('A selected tag no longer exists.');
         return tagId;
       });
     },
 
     nextRootSortOrder() {
-      const values = window.AppState.getRootTasks().map(task => task.sortOrder).filter(Number.isFinite);
+      const values = AppState.getRootTasks().map(task => task.sortOrder).filter(Number.isFinite);
       return values.length ? Math.min(...values) - 1 : 0;
     },
 
     nextSubtaskSortOrder(parentTaskId) {
-      const values = window.AppState.getSubtasks(parentTaskId).map(task => task.sortOrder).filter(Number.isFinite);
+      const values = AppState.getSubtasks(parentTaskId).map(task => task.sortOrder).filter(Number.isFinite);
       return values.length ? Math.max(...values) + 1 : 0;
     },
 
     buildTask(taskData = {}, existing = null) {
-      const now = window.TodoStorageMappers.nowIso();
+      const now = TodoStorageMappers.nowIso();
       const parentId = existing?.parentTaskId || taskData.parentTaskId || null;
-      const parent = parentId ? window.AppState.validateParentTaskId(parentId) : null;
+      const parent = parentId ? AppState.validateParentTaskId(parentId) : null;
       if (parentId && !parent) throw new Error('The parent task is invalid.');
       const title = String(taskData.title ?? existing?.title ?? '').trim();
       if (!title) throw new Error('Task title is required.');
@@ -256,7 +272,7 @@
       const normalizedRepeat = engine().normalizeRepeatRule(selectedRepeat);
       const selectedDate = taskData.dueDate !== undefined ? taskData.dueDate : existing?.dueDate;
       const dueDate = normalizedRepeat.mode !== 'none' && !selectedDate ? engine().today() : (selectedDate || null);
-      const task = window.TaskModel.normalizeTask({
+      const task = TaskModel.normalizeTask({
         id: existing?.id || this.createId('task'),
         title,
         description: String(taskData.description ?? existing?.description ?? ''),
@@ -299,16 +315,16 @@
     },
 
     async writeTaskAggregate(tx, task, reminderDefinitions = []) {
-      const S = window.TodoDbSchema.STORES;
-      const R = window.TodoRepositories;
-      await R.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(task));
+      const S = TodoDbSchema.STORES;
+      const R = TodoRepositories;
+      await R.put(tx, S.TASKS, TodoStorageMappers.taskToRow(task));
       await R.replaceRelations(tx, S.TASK_TAGS, 'by_task_id', task.id,
         (task.tags || []).map(tagId => ({ taskId: task.id, tagId })));
       await R.putMany(tx, S.REMINDER_DEFINITIONS, reminderDefinitions);
       const reminderIds = (task.reminders || []).filter(id => id && id !== 'none');
       await R.replaceRelations(tx, S.TASK_REMINDERS, 'by_task_id', task.id,
         reminderIds.map((reminderId, sortOrder) => ({ taskId: task.id, reminderId, sortOrder })));
-      const repeatRow = window.TodoStorageMappers.repeatToRow(task.id, task.repeat, task.repeatState);
+      const repeatRow = TodoStorageMappers.repeatToRow(task.id, task.repeat, task.repeatState);
       if (repeatRow) await R.put(tx, S.TASK_REPEAT_RULES, repeatRow);
       else await R.remove(tx, S.TASK_REPEAT_RULES, task.id);
     },
@@ -316,44 +332,44 @@
     createTask(taskData = {}) {
       return this.enqueue(async () => {
         const { task, reminderDefinitions } = this.buildTask(taskData);
-        const S = window.TodoDbSchema.STORES;
-        await window.TodoDb.withTransaction([
+        const S = TodoDbSchema.STORES;
+        await TodoDb.withTransaction([
           S.TASKS, S.TASK_TAGS, S.REMINDER_DEFINITIONS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
         ], 'readwrite', tx => this.writeTaskAggregate(tx, task, reminderDefinitions));
-        window.AppStateSync.upsertReminderDefinitions(reminderDefinitions);
+        AppStateSync.upsertReminderDefinitions(reminderDefinitions);
         replaceTaskMemory([], [task]);
-        return window.AppState.getTask(task.id);
+        return AppState.getTask(task.id);
       });
     },
 
     updateTask(taskId, taskData = {}) {
       return this.enqueue(async () => {
-        const existing = window.AppState.getTask(taskId);
+        const existing = AppState.getTask(taskId);
         if (!existing) throw new Error('Task not found.');
         const { task, reminderDefinitions } = this.buildTask(taskData, existing);
-        const children = !existing.parentTaskId ? window.AppState.getSubtasks(existing.id) : [];
+        const children = !existing.parentTaskId ? AppState.getSubtasks(existing.id) : [];
         const projectChanged = !existing.parentTaskId && existing.project !== task.project;
         const updatedChildren = projectChanged
           ? children.map(child => ({ ...child, project: task.project, updatedAt: task.updatedAt }))
           : [];
-        const S = window.TodoDbSchema.STORES;
-        await window.TodoDb.withTransaction([
+        const S = TodoDbSchema.STORES;
+        await TodoDb.withTransaction([
           S.TASKS, S.TASK_TAGS, S.REMINDER_DEFINITIONS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
         ], 'readwrite', async tx => {
           await this.writeTaskAggregate(tx, task, reminderDefinitions);
           for (const child of updatedChildren) {
-            await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(child));
+            await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(child));
           }
         });
-        window.AppStateSync.upsertReminderDefinitions(reminderDefinitions);
+        AppStateSync.upsertReminderDefinitions(reminderDefinitions);
         replaceTaskMemory([task, ...updatedChildren]);
-        return window.AppState.getTask(task.id);
+        return AppState.getTask(task.id);
       });
     },
 
     toggleTaskStatus(taskId) {
       return this.enqueue(async () => {
-        const task = window.AppState.getTask(taskId);
+        const task = AppState.getTask(taskId);
         if (!task) throw new Error('Task not found.');
         if (task.completed) return uncompleteTask(task);
         if (task.parentTaskId) {
@@ -366,7 +382,7 @@
     repairRepeatState() {
       return this.enqueue(async () => {
         const changed = [];
-        for (const source of window.AppState.tasks) {
+        for (const source of AppState.tasks) {
           const task = copyTask(source);
           let dirty = false;
           if (task.parentTaskId && !task.familySlotId) {
@@ -390,12 +406,12 @@
         }
 
         if (changed.length) {
-          const S = window.TodoDbSchema.STORES;
-          await window.TodoDb.withTransaction([S.TASKS, S.TASK_REPEAT_RULES], 'readwrite', async tx => {
+          const S = TodoDbSchema.STORES;
+          await TodoDb.withTransaction([S.TASKS, S.TASK_REPEAT_RULES], 'readwrite', async tx => {
             for (const task of changed) {
-              await window.TodoRepositories.put(tx, S.TASKS, window.TodoStorageMappers.taskToRow(task));
-              const row = window.TodoStorageMappers.repeatToRow(task.id, task.repeat, task.repeatState);
-              if (row) await window.TodoRepositories.put(tx, S.TASK_REPEAT_RULES, row);
+              await TodoRepositories.put(tx, S.TASKS, TodoStorageMappers.taskToRow(task));
+              const row = TodoStorageMappers.repeatToRow(task.id, task.repeat, task.repeatState);
+              if (row) await TodoRepositories.put(tx, S.TASK_REPEAT_RULES, row);
             }
           });
           replaceTaskMemory(changed);
@@ -406,34 +422,46 @@
 
     deleteTaskFamily(taskId) {
       return this.enqueue(async () => {
-        const task = window.AppState.getTask(taskId);
+        const task = AppState.getTask(taskId);
         if (!task) return false;
-        const ids = task.parentTaskId ? [task.id] : [task.id, ...window.AppState.getSubtaskIds(task.id)];
-        const S = window.TodoDbSchema.STORES;
-        await window.TodoDb.withTransaction([
+        const ids = task.parentTaskId ? [task.id] : [task.id, ...AppState.getSubtaskIds(task.id)];
+        const S = TodoDbSchema.STORES;
+        await TodoDb.withTransaction([
           S.TASKS, S.TASK_TAGS, S.TASK_REMINDERS, S.TASK_REPEAT_RULES
         ], 'readwrite', async tx => {
           for (const id of ids) {
-            await window.TodoRepositories.deleteByIndex(tx, S.TASK_TAGS, 'by_task_id', id);
-            await window.TodoRepositories.deleteByIndex(tx, S.TASK_REMINDERS, 'by_task_id', id);
-            await window.TodoRepositories.remove(tx, S.TASK_REPEAT_RULES, id);
-            await window.TodoRepositories.remove(tx, S.TASKS, id);
+            await TodoRepositories.deleteByIndex(tx, S.TASK_TAGS, 'by_task_id', id);
+            await TodoRepositories.deleteByIndex(tx, S.TASK_REMINDERS, 'by_task_id', id);
+            await TodoRepositories.remove(tx, S.TASK_REPEAT_RULES, id);
+            await TodoRepositories.remove(tx, S.TASKS, id);
           }
         });
-        window.AppStateSync.removeTasks(ids);
+        AppStateSync.removeTasks(ids);
         return true;
       });
     },
 
     setSetting(key, value) {
       return this.enqueue(async () => {
-        const S = window.TodoDbSchema.STORES;
-        await window.TodoDb.withTransaction(S.APP_SETTINGS, 'readwrite', tx =>
-          window.TodoRepositories.put(tx, S.APP_SETTINGS, { key, value })
+        const S = TodoDbSchema.STORES;
+        await TodoDb.withTransaction(S.APP_SETTINGS, 'readwrite', tx =>
+          TodoRepositories.put(tx, S.APP_SETTINGS, { key, value })
         );
-        window.AppStateSync.setSetting(key, value);
+        AppStateSync.setSetting(key, value);
         return value;
       });
     }
   };
+
+  AppDataService = {
+    ...AppDataServiceCore,
+    ...DataServiceTaxonomyMethods,
+    ...DataServiceReminderMethods,
+    ...DataServiceTaxonomyDragMethods,
+    ...DataServiceDragMethods,
+    ...DataServiceHierarchyMethods
+  };
+
 })();
+
+export { AppDataService };

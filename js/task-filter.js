@@ -1,6 +1,8 @@
-window.TaskFilter = {
+import { AppState } from './state.js';
+
+export const TaskFilter = {
   getDisplayTasks() {
-    const state = window.AppState;
+    const state = AppState;
     if (!state) return [];
 
     const roots = typeof state.getSiblingTasks === 'function'

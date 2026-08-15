@@ -1,21 +1,29 @@
-window.AppPersistence = (() => {
-  const { STORES } = window.TodoDbSchema;
+import { TodoDbSchema } from './db-schema.js';
+import { TodoDb } from './db.js';
+import { TodoRepositories } from './repositories.js';
+import { TodoStorageMappers } from './mappers.js';
+import { TaskModel } from '../task-model.js';
+import { AppSeedData, AppState } from '../state.js';
+import { AppStateSync } from '../state-sync.js';
+
+export const AppPersistence = (() => {
+  const { STORES } = TodoDbSchema;
   const allStores = Object.values(STORES);
-  const repo = () => window.TodoRepositories;
-  const mapper = () => window.TodoStorageMappers;
+  const repo = () => TodoRepositories;
+  const mapper = () => TodoStorageMappers;
 
   async function initialize() {
-    await window.TodoDb.open();
-    const initialized = await window.TodoDb.withTransaction(STORES.APP_META, 'readonly', tx =>
+    await TodoDb.open();
+    const initialized = await TodoDb.withTransaction(STORES.APP_META, 'readonly', tx =>
       repo().get(tx, STORES.APP_META, 'initialized')
     );
     if (!initialized?.value) await seedFirstRun();
   }
 
   async function seedFirstRun() {
-    const seed = window.AppSeedData;
+    const seed = AppSeedData;
     const now = mapper().nowIso();
-    await window.TodoDb.withTransaction(allStores, 'readwrite', async tx => {
+    await TodoDb.withTransaction(allStores, 'readwrite', async tx => {
       const projects = (seed.projects || []).map((item, index) => ({
         ...item, parentId: item.parentId || null, sortOrder: index, createdAt: now, updatedAt: now
       }));
@@ -23,7 +31,7 @@ window.AppPersistence = (() => {
         ...item, parentId: item.parentId || null, sortOrder: index, createdAt: now, updatedAt: now
       }));
       const validTags = new Set(tags.map(item => item.id));
-      const tasks = (seed.tasks || []).map((item, index) => window.TaskModel.normalizeTask({
+      const tasks = (seed.tasks || []).map((item, index) => TaskModel.normalizeTask({
         ...item, sortOrder: index, createdAt: item.createdAt || now, updatedAt: now
       }));
 
@@ -53,7 +61,7 @@ window.AppPersistence = (() => {
   }
 
   async function readAll() {
-    return window.TodoDb.withTransaction(allStores, 'readonly', async tx => {
+    return TodoDb.withTransaction(allStores, 'readonly', async tx => {
       const [projects, tags, tasks, taskTags, reminderDefinitions, taskReminders, repeatRules, settings] = await Promise.all([
         repo().getAll(tx, STORES.PROJECTS), repo().getAll(tx, STORES.TAGS), repo().getAll(tx, STORES.TASKS),
         repo().getAll(tx, STORES.TASK_TAGS), repo().getAll(tx, STORES.REMINDER_DEFINITIONS),
@@ -135,7 +143,7 @@ window.AppPersistence = (() => {
     const hasRepairs = Object.values(repairs).some(items => items.length);
     if (!hasRepairs) return;
     console.warn('TodoListDB repaired invalid relationships during hydration.', repairs);
-    await window.TodoDb.withTransaction([
+    await TodoDb.withTransaction([
       STORES.PROJECTS, STORES.TAGS, STORES.TASKS, STORES.TASK_TAGS, STORES.TASK_REMINDERS, STORES.TASK_REPEAT_RULES
     ], 'readwrite', async tx => {
       await repo().putMany(tx, STORES.PROJECTS, repairs.projects);
@@ -171,14 +179,14 @@ window.AppPersistence = (() => {
     ));
     const settings = Object.fromEntries(data.settings.map(item => [item.key, item.value]));
 
-    window.AppState.hydrate({
+    AppStateSync.hydrate({
       projects: [...data.projects].sort((a, b) => a.sortOrder - b.sortOrder),
       tags: [...data.tags].sort((a, b) => a.sortOrder - b.sortOrder),
       tasks,
       reminderDefinitions: data.reminderDefinitions,
       settings
     });
-    return window.AppState;
+    return AppState;
   }
 
   function reportError(message, error) {

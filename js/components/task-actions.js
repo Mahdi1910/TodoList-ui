@@ -1,4 +1,7 @@
-window.TaskActionMethods = {
+import { AppPersistence } from '../storage/persistence.js';
+import { AppDataService } from '../storage/data-service.js';
+import { AppState } from '../state.js';
+export const TaskActionMethods = {
   initTaskActions() {
     this.taskActionMenu = document.getElementById('task-action-menu');
     this.taskActionAddBtn = this.taskActionMenu?.querySelector('[data-task-action="add-subtask"]');
@@ -77,13 +80,13 @@ window.TaskActionMethods = {
   },
 
   getEligibleParentTasks(taskId) {
-    return window.AppState.getRootTasks()
+    return AppState.getRootTasks()
       .filter(task => task.id !== taskId && !task.completed)
       .sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.title).localeCompare(String(b.title)));
   },
 
   openTaskActionMenu(taskId, anchor) {
-    const task = window.AppState.getTask(taskId);
+    const task = AppState.getTask(taskId);
     if (!task || !this.taskActionMenu) return;
 
     this.closeTaskActionMenu(false);
@@ -92,8 +95,8 @@ window.TaskActionMethods = {
     this.closeAllContextMenus();
     window.SubtaskEditorComponent?.closeMenus();
 
-    const isSubtask = window.AppState.isSubtask(task);
-    const hasChildren = !isSubtask && window.AppState.hasSubtasks(task.id);
+    const isSubtask = AppState.isSubtask(task);
+    const hasChildren = !isSubtask && AppState.hasSubtasks(task.id);
     const eligibleParents = isSubtask ? [] : this.getEligibleParentTasks(task.id);
     this.taskActionTargetId = task.id;
     this.taskActionAnchor = anchor;
@@ -135,8 +138,8 @@ window.TaskActionMethods = {
   },
 
   openTaskParentPicker() {
-    const task = window.AppState.getTask(this.taskActionTargetId);
-    if (!task || task.parentTaskId || window.AppState.hasSubtasks(task.id)) return;
+    const task = AppState.getTask(this.taskActionTargetId);
+    if (!task || task.parentTaskId || AppState.hasSubtasks(task.id)) return;
     const parents = this.getEligibleParentTasks(task.id);
     if (!parents.length) return;
 
@@ -186,9 +189,9 @@ window.TaskActionMethods = {
   },
 
   handleTaskActionAddSubtask() {
-    const task = window.AppState.getTask(this.taskActionTargetId);
+    const task = AppState.getTask(this.taskActionTargetId);
     const trigger = this.taskActionAnchor;
-    if (!task || window.AppState.isSubtask(task)) return;
+    if (!task || AppState.isSubtask(task)) return;
     this.closeTaskActionMenu(false);
     window.SubtaskEditorComponent?.openCreate(task.id, trigger);
   },
@@ -197,12 +200,12 @@ window.TaskActionMethods = {
     const taskId = this.taskActionTargetId;
     if (!taskId || !parentId) return;
     try {
-      await window.AppDataService.linkTaskToParent(taskId, parentId);
+      await AppDataService.linkTaskToParent(taskId, parentId);
       this.closeTaskParentPicker(false);
       this.closeTaskActionMenu(false);
       this.refreshAfterTaskMutation();
     } catch (error) {
-      window.AppPersistence.reportError('Could not link this task to the selected parent.', error);
+      AppPersistence.reportError('Could not link this task to the selected parent.', error);
     }
   },
 
@@ -210,28 +213,28 @@ window.TaskActionMethods = {
     const taskId = this.taskActionTargetId;
     if (!taskId) return;
     try {
-      await window.AppDataService.unlinkTask(taskId);
+      await AppDataService.unlinkTask(taskId);
       this.closeTaskActionMenu(false);
       this.refreshAfterTaskMutation();
     } catch (error) {
-      window.AppPersistence.reportError('Could not unlink this subtask.', error);
+      AppPersistence.reportError('Could not unlink this subtask.', error);
     }
   },
 
   async handleTaskActionDelete() {
-    const task = window.AppState.getTask(this.taskActionTargetId);
+    const task = AppState.getTask(this.taskActionTargetId);
     if (!task) return;
-    const subtaskCount = window.AppState.getSubtasks(task.id).length;
+    const subtaskCount = AppState.getSubtasks(task.id).length;
     if (!task.parentTaskId && subtaskCount > 0) {
       const ok = window.confirm(`Delete "${task.title}" and its ${subtaskCount} ${subtaskCount === 1 ? 'subtask' : 'subtasks'}?`);
       if (!ok) return;
     }
     this.closeTaskActionMenu(false);
     try {
-      await window.AppDataService.deleteTaskFamily(task.id);
+      await AppDataService.deleteTaskFamily(task.id);
       this.refreshAfterTaskMutation?.();
     } catch (error) {
-      window.AppPersistence.reportError('Could not delete this task.', error);
+      AppPersistence.reportError('Could not delete this task.', error);
     }
   },
 
