@@ -14,47 +14,19 @@ window.SettingsComponent = {
     this.pendingRestoreSnapshot = null;
     this.backupBusy = false;
     this.restoreBusy = false;
-    this.ensureBackupUi();
+    this.bindBackupUi();
     this.bindEvents();
   },
 
-  ensureBackupUi() {
-    if (!this.modal || document.getElementById('settings-data-section')) return;
-    const footer = this.modal.querySelector('.modal-footer');
-    const section = document.createElement('section');
-    section.id = 'settings-data-section';
-    section.className = 'settings-section settings-data-section';
-    section.setAttribute('aria-labelledby', 'settings-data-title');
-    section.innerHTML = `
-      <div class="settings-section-copy">
-        <span class="settings-section-title" id="settings-data-title">Data</span>
-        <span class="settings-data-note">Backup all saved tasks, projects, tags, reminders, repeat data and preferences.</span>
-      </div>
-      <div class="settings-data-actions">
-        <button type="button" class="btn-secondary" id="btn-create-backup">Create Backup</button>
-        <button type="button" class="btn-secondary" id="btn-restore-backup">Restore Backup</button>
-        <input class="sr-only" type="file" id="restore-backup-input" accept="application/json,.json" tabindex="-1">
-      </div>
-      <p class="backup-restore-status" id="backup-restore-status" role="status" aria-live="polite"></p>
-      <div class="restore-summary" id="restore-backup-summary" hidden tabindex="-1">
-        <strong>Backup ready to restore</strong>
-        <span id="restore-backup-details"></span>
-        <span class="restore-warning">This replaces all current local TodoList data.</span>
-        <div class="restore-confirm-actions">
-          <button type="button" class="btn-secondary" id="btn-cancel-restore">Cancel</button>
-          <button type="button" class="btn-danger" id="btn-confirm-restore">Restore and Replace</button>
-        </div>
-      </div>`;
-    footer?.before(section);
-
-    this.createBackupBtn = section.querySelector('#btn-create-backup');
-    this.restoreBackupBtn = section.querySelector('#btn-restore-backup');
-    this.restoreInput = section.querySelector('#restore-backup-input');
-    this.backupStatus = section.querySelector('#backup-restore-status');
-    this.restoreSummary = section.querySelector('#restore-backup-summary');
-    this.restoreDetails = section.querySelector('#restore-backup-details');
-    this.cancelRestoreBtn = section.querySelector('#btn-cancel-restore');
-    this.confirmRestoreBtn = section.querySelector('#btn-confirm-restore');
+  bindBackupUi() {
+    this.createBackupBtn = document.getElementById('btn-create-backup');
+    this.restoreBackupBtn = document.getElementById('btn-restore-backup');
+    this.restoreInput = document.getElementById('restore-backup-input');
+    this.backupStatus = document.getElementById('backup-restore-status');
+    this.restoreSummary = document.getElementById('restore-backup-summary');
+    this.restoreDetails = document.getElementById('restore-backup-details');
+    this.cancelRestoreBtn = document.getElementById('btn-cancel-restore');
+    this.confirmRestoreBtn = document.getElementById('btn-confirm-restore');
   },
 
   bindEvents() {
@@ -131,10 +103,10 @@ window.SettingsComponent = {
   },
 
   setDataBusy(busy) {
-    this.createBackupBtn.disabled = busy;
-    this.restoreBackupBtn.disabled = busy;
-    this.confirmRestoreBtn.disabled = busy;
-    this.cancelRestoreBtn.disabled = busy;
+    if (this.createBackupBtn) this.createBackupBtn.disabled = busy;
+    if (this.restoreBackupBtn) this.restoreBackupBtn.disabled = busy;
+    if (this.confirmRestoreBtn) this.confirmRestoreBtn.disabled = busy;
+    if (this.cancelRestoreBtn) this.cancelRestoreBtn.disabled = busy;
     if (this.themeToggle) this.themeToggle.disabled = busy;
   },
 
