@@ -15,10 +15,24 @@ export const RepeatEngine = (() => {
   }
 
   function parseDate(value) {
-    if (!value || typeof value !== 'string') return null;
-    const [y, m, d] = value.split('-').map(Number);
-    if (!y || !m || !d) return null;
-    return new Date(y, m - 1, d, 12, 0, 0, 0);
+    if (typeof value !== 'string') return null;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return null;
+
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    const candidate = new Date(2000, 0, 1, 12, 0, 0, 0);
+    candidate.setFullYear(y, m - 1, d);
+    candidate.setHours(12, 0, 0, 0);
+
+    if (
+      candidate.getFullYear() !== y ||
+      candidate.getMonth() !== m - 1 ||
+      candidate.getDate() !== d
+    ) return null;
+
+    return candidate;
   }
 
   function today() {

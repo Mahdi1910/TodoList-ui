@@ -1,10 +1,11 @@
 import { AppState } from '../state.js';
 export const TaskMenuMethods = {
-  createProjectMenuItem(project) {
+  createProjectMenuItem(project, depth = 0) {
     const item = document.createElement('div');
     const selected = project.id === this.selectedProject;
     item.className = `context-menu-item${selected ? ' selected' : ''}`;
     item.dataset.project = project.id;
+    item.style.paddingLeft = `${12 + depth * 16}px`;
     item.setAttribute('role', 'option');
     item.setAttribute('tabindex', '-1');
     item.setAttribute('aria-selected', selected ? 'true' : 'false');

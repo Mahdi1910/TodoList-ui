@@ -13,8 +13,8 @@ export const TaskTaxonomyMenuOrderMethods = {
     inboxItem.setAttribute('aria-selected', this.selectedProject === '' ? 'true' : 'false');
     this.menuProject.appendChild(inboxItem);
 
-    TaxonomyOrder.flattenTree('project').forEach(({ item: project }) => {
-      this.menuProject.appendChild(this.createProjectMenuItem(project));
+    TaxonomyOrder.flattenTree('project').forEach(({ item: project, depth }) => {
+      this.menuProject.appendChild(this.createProjectMenuItem(project, depth));
     });
   },
 

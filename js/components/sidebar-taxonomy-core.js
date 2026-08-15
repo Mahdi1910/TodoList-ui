@@ -52,7 +52,11 @@ export const SidebarTaxonomyCore = (() => {
     item.dataset[`${type}Id`] = entity.id;
     item.dataset.title = entity.name;
     const left = document.createElement('span');
-    left.className = 'item-left';
+    left.className = 'item-left taxonomy-select-control';
+    left.dataset.taxonomySelect = entity.id;
+    left.setAttribute('role', 'button');
+    left.setAttribute('tabindex', '0');
+    left.setAttribute('aria-label', `Select ${config.stem} ${entity.name}`);
     const icon = document.createElement('span');
     icon.className = `${type}-icon`;
     icon.textContent = entity.icon;
@@ -264,6 +268,15 @@ export const SidebarTaxonomyCore = (() => {
       } else if (item) {
         host.selectFilter(item);
       }
+    });
+    list?.addEventListener('keydown', event => {
+      const control = event.target.closest('[data-taxonomy-select]');
+      if (!control || !list.contains(control) || (event.key !== 'Enter' && event.key !== ' ')) return;
+      const item = control.closest(`[data-${type}-id]`);
+      if (!item) return;
+      event.preventDefault();
+      event.stopPropagation();
+      host.selectFilter(item);
     });
   }
   function closeIconPicker(host, config) {
