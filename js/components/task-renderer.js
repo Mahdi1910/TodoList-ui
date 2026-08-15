@@ -198,38 +198,15 @@ export const TaskRendererMethods = {
       let text = `🔁 Every ${custom.interval} ${unitLabel}`;
       if (custom.unit === 'week' && custom.weekdays?.length) {
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        text += ` on ${custom.weekdays.sort((a, b) => a - b).map(d => dayNames[d]).join(', ')}`;
+        const orderedWeekdays = [...custom.weekdays].sort((a, b) => a - b);
+        text += ` on ${orderedWeekdays.map(d => dayNames[d]).join(', ')}`;
       }
       return text;
     }
     return '🔁 repeat';
   },
 
-  formatScheduleLabel(dateStr, timeStr) {
-    let datePart = '';
-    if (dateStr) {
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      if (dateStr === todayStr) {
-        datePart = 'Today';
-      } else {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(now.getDate() + 1);
-        const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-        if (dateStr === tomorrowStr) {
-          datePart = 'Tomorrow';
-        } else {
-          const parts = dateStr.split('-').map(Number);
-          datePart = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
-            .format(new Date(parts[0], parts[1] - 1, parts[2]));
-        }
-      }
-    }
-    if (datePart && timeStr) return `${datePart}, ${timeStr}`;
-    return datePart || timeStr || '';
-  },
-
-  formatDueDateLabel(dateStr) {
+  formatDateLabel(dateStr) {
     if (!dateStr) return '';
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -241,5 +218,11 @@ export const TaskRendererMethods = {
     const parts = dateStr.split('-').map(Number);
     return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
       .format(new Date(parts[0], parts[1] - 1, parts[2]));
+  },
+
+  formatScheduleLabel(dateStr, timeStr) {
+    const datePart = this.formatDateLabel(dateStr);
+    if (datePart && timeStr) return `${datePart}, ${timeStr}`;
+    return datePart || timeStr || '';
   }
 };
