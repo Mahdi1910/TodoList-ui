@@ -96,7 +96,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - The sidebar can receive `aria-hidden="true"` while focus is still inside a sidebar control.
   - Apply the same general focus/inert principles used for dialogs.
 
-- [ ] **16. Make dynamic Project/Tag rows proper keyboard controls.**
+- [x] **16. Make dynamic Project/Tag rows proper keyboard controls.**
   - Static sidebar filters are buttons, but generated Project/Tag rows are clickable divs.
   - Use semantic buttons or provide complete keyboard/focus behavior.
 
@@ -104,7 +104,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - The viewport currently uses `maximum-scale=1.0` and `user-scalable=no`.
   - Remove those restrictions unless there is a very strong UI reason to keep them.
 
-- [ ] **18. Make the Task Project picker visually show Project hierarchy depth.**
+- [x] **18. Make the Task Project picker visually show Project hierarchy depth.**
   - The picker uses the flattened hierarchy order but currently does not visibly indent nested Projects.
   - Make nested Projects visually understandable, similar to Tags.
 
@@ -129,7 +129,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - Today/Tomorrow/date formatting exists in more than one Task renderer method.
   - Use one small shared formatting helper.
 
-- [ ] **23. Make Repeat date parsing stricter.**
+- [x] **23. Make Repeat date parsing stricter.**
   - JavaScript can normalize invalid dates such as an impossible day into another month.
   - Validate that parsed year/month/day exactly match the source string.
 
