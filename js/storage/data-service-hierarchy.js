@@ -118,7 +118,8 @@ Object.assign(window.AppDataService, {
     beforeTaskId = null,
     afterTaskId = null,
     sourceContext = null,
-    destinationContext = null
+    destinationContext = null,
+    customOrderSnapshot = null
   } = {}) {
     return this.enqueue(async () => {
       const task = window.AppState.getTask(taskId);
@@ -133,12 +134,18 @@ Object.assign(window.AppDataService, {
 
       const copies = new Map(window.AppState.tasks.map(item => [item.id, { ...item, tags: [...(item.tags || [])] }]));
       const changed = new Set();
+      const normalizedCustomOrder = customOrderSnapshot
+        ? this.applyCustomOrderSnapshot(copies, changed, customOrderSnapshot)
+        : null;
+      const scopeIds = (parentId, excludeId = null) => normalizedCustomOrder
+        ? this.getCustomOrderScopeIds(normalizedCustomOrder, parentId, excludeId)
+        : this.hierarchyScopeIds(parentId, excludeId);
       const now = window.TodoStorageMappers.nowIso();
       const moved = copies.get(task.id);
-      const sourceIds = this.hierarchyScopeIds(sourceParentId, task.id);
+      const sourceIds = scopeIds(sourceParentId, task.id);
       const targetBase = sourceParentId === targetParentId
         ? sourceIds
-        : this.hierarchyScopeIds(targetParentId, task.id);
+        : scopeIds(targetParentId, task.id);
       const targetIds = this.insertHierarchyRelative(targetBase, task.id, beforeTaskId, afterTaskId);
 
       moved.parentTaskId = targetParentId || null;
