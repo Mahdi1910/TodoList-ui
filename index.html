@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Minimal Task Workspace</title>
 
   <!-- CSS Module Imports -->
@@ -74,7 +74,7 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <!-- 2. Secondary Floating Drawer Sidebar for To-Do Module -->
-    <aside class="secondary-sidebar" id="secondary-sidebar" aria-label="To-Do filters and projects" aria-hidden="true">
+    <aside class="secondary-sidebar" id="secondary-sidebar" aria-label="To-Do filters and projects" aria-hidden="true" inert>
       <div class="sidebar-header">
         <span class="sidebar-title">To-Do List</span>
       </div>
@@ -95,7 +95,7 @@
           <button class="sidebar-nav-item" data-filter="today">
             <span class="item-left">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2v12a2 2 0 002 2z" />
               </svg>
               Today
             </span>
@@ -245,7 +245,7 @@
       </button>
       <button class="nav-item-mobile" data-app="habit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
         </svg>
         Habits
       </button>
@@ -320,7 +320,7 @@
           <div class="quick-icons-left">
             <!-- Icon 1: Calendar / Date -->
             <button type="button" class="toolbar-icon-btn" id="btn-pop-date" title="Set Date">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002 2z"/></svg>
             </button>
 
             <!-- Icon 2: Priority Flags (Dropdown Context Menu) -->
@@ -380,7 +380,7 @@
         <div class="quick-toolbar">
           <div class="quick-icons-left">
             <button type="button" class="toolbar-icon-btn" id="btn-subtask-date" title="Set Date" aria-label="Set subtask schedule">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002 2z"/></svg>
             </button>
             <div class="context-menu-wrapper">
               <button type="button" class="toolbar-icon-btn" id="btn-subtask-priority" title="Select Priority" aria-label="Select subtask priority">
@@ -418,7 +418,7 @@
         <!-- 3 Segmented Control Tabs -->
         <div class="schedule-tabs" role="tablist" aria-label="Schedule mode">
           <button type="button" class="schedule-tab-btn active" role="tab" aria-selected="true" id="tab-sched-date" aria-controls="panel-sched-date">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002 2z"/></svg>
             <span>Date</span>
           </button>
           <button type="button" class="schedule-tab-btn" role="tab" aria-selected="false" id="tab-sched-time" aria-controls="panel-sched-time">
