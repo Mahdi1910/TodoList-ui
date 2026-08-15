@@ -34,7 +34,7 @@ export const TaskGroupMethods = {
     });
     return keys.map(key => ({
       key,
-      label: key ? this.formatDueDateLabel(key) : 'No Date',
+      label: key ? this.formatDateLabel(key) : 'No Date',
       tasks: byDate.get(key)
     }));
   },
