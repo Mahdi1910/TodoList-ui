@@ -4,6 +4,7 @@ import { TodoDb } from './db.js';
 import { TodoDbSchema } from './db-schema.js';
 import { RepeatEngine } from '../repeat/repeat-engine.js';
 import { AppState } from '../state.js';
+import { AppStateSync } from '../state-sync.js';
 export const DataServiceHierarchyMethods = {
   hierarchyScopeIds(parentTaskId = null, excludeTaskId = null) {
     return AppState.getSiblingTaskIds(parentTaskId)
