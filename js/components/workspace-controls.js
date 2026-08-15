@@ -14,9 +14,10 @@ window.WorkspaceControls = {
     this.directionBtn = document.getElementById('btn-sort-direction');
     this.menuBtn = document.getElementById('btn-workspace-menu');
     this.menu = document.getElementById('workspace-menu');
-    if (!this.directionBtn || !this.menuBtn || !this.menu) return;
+    this.settingsTrigger = document.getElementById('workspace-sort-group-trigger');
+    this.settingsPanel = document.getElementById('workspace-sort-group-panel');
+    if (!this.directionBtn || !this.menuBtn || !this.menu || !this.settingsTrigger || !this.settingsPanel) return;
 
-    this.buildLayeredMenu();
     this.directionBtn.addEventListener('click', () => this.toggleDirection());
     this.menuBtn.addEventListener('click', e => {
       e.stopPropagation();
@@ -41,68 +42,6 @@ window.WorkspaceControls = {
     window.addEventListener('resize', () => this.repositionSettingsPanel());
     window.visualViewport?.addEventListener('resize', () => this.repositionSettingsPanel());
     this.syncUI();
-  },
-
-  buildLayeredMenu() {
-    this.menu.innerHTML = `
-      <div class="workspace-menu-label">View</div>
-      <div class="workspace-view-switcher" role="group" aria-label="Task view">
-        <button type="button" data-view-type="list" role="radio" aria-checked="true" aria-label="List view" title="List view">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-        <button type="button" data-view-type="kanban" role="radio" aria-checked="false" aria-label="Kanban view" title="Kanban view">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="5" width="5" height="14" rx="1"/><rect x="11" y="5" width="4" height="9" rx="1"/><rect x="17" y="5" width="3" height="11" rx="1"/></svg>
-        </button>
-        <button type="button" data-view-type="timeline" disabled aria-disabled="true" aria-label="Timeline view unavailable" title="Timeline view — unavailable">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h12" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
-        </button>
-      </div>
-      <div class="workspace-menu-divider"></div>
-      <button type="button" class="workspace-submenu-trigger" id="workspace-sort-group-trigger" aria-haspopup="dialog" aria-controls="workspace-sort-group-panel" aria-expanded="false">
-        <span class="workspace-menu-primary">Sort &amp; Group</span>
-        <span class="workspace-menu-chevron" aria-hidden="true">›</span>
-      </button>`;
-
-    this.settingsTrigger = this.menu.querySelector('#workspace-sort-group-trigger');
-    this.settingsPanel = this.createSortGroupPanel();
-  },
-
-  createSortGroupPanel() {
-    document.getElementById('workspace-sort-group-panel')?.remove();
-    const panel = document.createElement('div');
-    panel.id = 'workspace-sort-group-panel';
-    panel.className = 'workspace-settings-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Sort and group settings');
-    panel.setAttribute('aria-hidden', 'true');
-    panel.innerHTML = `
-      <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
-        <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
-        <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
-          ${this.optionChip('sort', 'custom', 'Custom')}
-          ${this.optionChip('sort', 'dueDate', 'Due Date')}
-          ${this.optionChip('sort', 'priority', 'Priority')}
-          ${this.optionChip('sort', 'name', 'Name')}
-          ${this.optionChip('sort', 'createdAt', 'Created Date')}
-        </div>
-      </section>
-      <div class="workspace-settings-divider"></div>
-      <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
-        <div class="workspace-settings-label" id="workspace-group-label">Group</div>
-        <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
-          ${this.optionChip('group', 'none', 'None')}
-          ${this.optionChip('group', 'priority', 'Priority')}
-          ${this.optionChip('group', 'date', 'Date')}
-          ${this.optionChip('group', 'project', 'Project')}
-          ${this.optionChip('group', 'tag', 'Tag')}
-        </div>
-      </section>`;
-    document.body.appendChild(panel);
-    return panel;
-  },
-
-  optionChip(type, value, label) {
-    return `<button type="button" class="workspace-option-chip" data-${type}-key="${value}" role="radio" aria-checked="false">${label}</button>`;
   },
 
   openMenu() {
