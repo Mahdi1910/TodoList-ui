@@ -4,6 +4,7 @@ import { TodoDb } from './db.js';
 import { TodoDbSchema } from './db-schema.js';
 import { TaxonomyOrder } from '../taxonomy-order.js';
 import { AppState } from '../state.js';
+import { AppStateSync } from '../state-sync.js';
 export const DataServiceTaxonomyDragMethods = {
   taxonomyConfig(entityType) {
     if (!['project', 'tag'].includes(entityType)) throw new Error('Invalid taxonomy type.');
