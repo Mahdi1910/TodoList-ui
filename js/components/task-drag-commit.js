@@ -20,24 +20,16 @@ window.TaskDragCommitMethods = {
         customOrderSnapshot = workspace.buildCustomOrderSnapshot();
       }
 
-      const payload = {
+      await window.AppDataService.commitHierarchyDrag({
         taskId: session.taskId,
         targetLevel: session.previewLevel,
         targetParentId: session.previewParentId,
         beforeTaskId: session.previewBeforeTaskId,
         afterTaskId: session.previewAfterTaskId,
         sourceContext: session.sourceContext,
-        destinationContext: destination
-      };
-
-      if (customOrderSnapshot) {
-        await window.AppDataService.commitSortedHierarchyDrag({
-          ...payload,
-          customOrderSnapshot
-        });
-      } else {
-        await window.AppDataService.commitHierarchyDrag(payload);
-      }
+        destinationContext: destination,
+        customOrderSnapshot
+      });
 
       if (workspace) {
         workspace.sortKey = 'custom';
@@ -56,8 +48,7 @@ window.TaskDragCommitMethods = {
   hasDragMetadataChange(source, destination) {
     return Boolean(
       source && destination &&
-      source.groupType !== 'none' &&
-      source.groupType === destination.groupType &&
+      source.groupType !== 'none' && source.groupType === destination.groupType &&
       source.groupKey !== destination.groupKey
     );
   },
