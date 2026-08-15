@@ -4,6 +4,7 @@ import { TodoDb } from './db.js';
 import { TodoDbSchema } from './db-schema.js';
 import { TaxonomyOrder } from '../taxonomy-order.js';
 import { AppState } from '../state.js';
+import { AppStateSync } from '../state-sync.js';
 export const DataServiceTaxonomyMethods = {
   nextEntitySortOrder(items = []) {
     const values = items.map(item => item.sortOrder).filter(Number.isFinite);
