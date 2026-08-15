@@ -39,42 +39,11 @@ window.TaskRendererMethods = {
 
   ensureCompletedSectionToggle() {
     if (this.completedSectionToggle || !this.completedSectionEl) return;
-    const header = this.completedSectionEl.querySelector(':scope > .section-header-title');
-    if (!header) return;
-
-    if (typeof this.completedSectionCollapsed !== 'boolean') {
-      this.completedSectionCollapsed = false;
-    }
-
-    const label = header.querySelector('span:first-child');
-    const count = this.completedCountEl || header.querySelector('#completed-tasks-count');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'section-header-title completed-section-toggle';
-    button.setAttribute('aria-controls', 'completed-task-list');
-    button.setAttribute('aria-expanded', 'true');
-    button.setAttribute('aria-label', 'Collapse completed tasks');
-
-    if (label) button.appendChild(label);
-    else {
-      const fallbackLabel = document.createElement('span');
-      fallbackLabel.textContent = 'Completed';
-      button.appendChild(fallbackLabel);
-    }
-
-    const meta = document.createElement('span');
-    meta.className = 'completed-section-toggle-meta';
-    if (count) meta.appendChild(count);
-    const chevron = document.createElement('span');
-    chevron.className = 'completed-section-chevron';
-    chevron.setAttribute('aria-hidden', 'true');
-    chevron.textContent = '▾';
-    meta.appendChild(chevron);
-    button.appendChild(meta);
-    header.replaceWith(button);
-
+    const button = this.completedSectionEl.querySelector(':scope > .completed-section-toggle');
+    if (!button) return;
+    if (typeof this.completedSectionCollapsed !== 'boolean') this.completedSectionCollapsed = false;
     this.completedSectionToggle = button;
-    this.completedSectionChevron = chevron;
+    this.completedSectionChevron = button.querySelector('.completed-section-chevron');
     button.addEventListener('click', () => this.toggleCompletedSection());
   },
 
