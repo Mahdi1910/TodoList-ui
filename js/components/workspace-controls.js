@@ -174,6 +174,25 @@ window.WorkspaceControls = {
     }
   },
 
+  buildCustomOrderSnapshot() {
+    const roots = window.AppState.getRootTasks();
+    const snapshot = [{
+      parentTaskId: null,
+      orderedIds: this.sortTasks(roots).map(task => task.id)
+    }];
+
+    roots.forEach(parent => {
+      const children = window.AppState.getSubtasks(parent.id);
+      if (!children.length) return;
+      snapshot.push({
+        parentTaskId: parent.id,
+        orderedIds: this.sortTasks(children).map(task => task.id)
+      });
+    });
+
+    return snapshot;
+  },
+
   async handleSettingsPanelClick(e) {
     const sortItem = e.target.closest('[data-sort-key]');
     const groupItem = e.target.closest('[data-group-key]');
@@ -181,8 +200,15 @@ window.WorkspaceControls = {
     try {
       if (sortItem) {
         const value = this.normalizeSortKey(sortItem.dataset.sortKey);
-        await window.AppDataService.setSetting('sortKey', value);
-        this.sortKey = value;
+        const current = this.normalizeSortKey(this.sortKey);
+        if (value === 'custom' && current !== 'custom') {
+          const snapshot = this.buildCustomOrderSnapshot();
+          await window.AppDataService.activateCustomSort(snapshot);
+          this.sortKey = 'custom';
+        } else if (value !== current) {
+          await window.AppDataService.setSetting('sortKey', value);
+          this.sortKey = value;
+        }
       }
       if (groupItem) {
         const value = groupItem.dataset.groupKey;
