@@ -8,7 +8,19 @@ window.TaskDragCommitMethods = {
       return;
     }
     try {
-      await window.AppDataService.commitHierarchyDrag({
+      const workspace = window.WorkspaceControls;
+      const startSortKey = workspace?.normalizeSortKey(session.startSortKey || 'custom') || 'custom';
+      let customOrderSnapshot = null;
+
+      if (startSortKey !== 'custom') {
+        const currentSortKey = workspace?.normalizeSortKey(workspace.sortKey || 'custom') || 'custom';
+        if (currentSortKey !== startSortKey) {
+          throw new Error('The active sort changed while this task was being dragged.');
+        }
+        customOrderSnapshot = workspace.buildCustomOrderSnapshot();
+      }
+
+      const payload = {
         taskId: session.taskId,
         targetLevel: session.previewLevel,
         targetParentId: session.previewParentId,
@@ -16,10 +28,20 @@ window.TaskDragCommitMethods = {
         afterTaskId: session.previewAfterTaskId,
         sourceContext: session.sourceContext,
         destinationContext: destination
-      });
-      if (window.WorkspaceControls) {
-        window.WorkspaceControls.sortKey = 'custom';
-        window.WorkspaceControls.syncUI();
+      };
+
+      if (customOrderSnapshot) {
+        await window.AppDataService.commitSortedHierarchyDrag({
+          ...payload,
+          customOrderSnapshot
+        });
+      } else {
+        await window.AppDataService.commitHierarchyDrag(payload);
+      }
+
+      if (workspace) {
+        workspace.sortKey = 'custom';
+        workspace.syncUI();
       }
     } catch (error) {
       window.AppPersistence.reportError('Could not save the new task hierarchy or position.', error);
