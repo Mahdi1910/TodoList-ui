@@ -1,6 +1,7 @@
 import { AppState } from '../state.js';
-import { SidebarProjectMethods } from './sidebar-projects.js';
-import { SidebarTagMethods } from './sidebar-tags.js';
+import { SidebarProjectConfig, SidebarProjectMethods } from './sidebar-projects.js';
+import { SidebarTagConfig, SidebarTagMethods } from './sidebar-tags.js';
+import { SidebarTaxonomyCore } from './sidebar-taxonomy-core.js';
 import { SidebarTaxonomyDragMethods } from './sidebar-taxonomy-drag.js';
 import { SidebarTaxonomyDragHierarchyMethods } from './sidebar-taxonomy-drag-hierarchy.js';
 import { SidebarTaxonomyDragTouchMethods } from './sidebar-taxonomy-drag-touch.js';
@@ -17,8 +18,8 @@ const SidebarCore = {
     this.backdropEl = document.getElementById('sidebar-backdrop');
     this.toggleBtn = document.getElementById('btn-toggle-sidebar');
     this.viewTitleEl = document.getElementById('current-view-title');
-    this.taxonomyConfigs = [window.SidebarProjectConfig, window.SidebarTagConfig].filter(Boolean);
-    this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.initialize(this, config));
+    this.taxonomyConfigs = [SidebarProjectConfig, SidebarTagConfig].filter(Boolean);
+    this.taxonomyConfigs.forEach(config => SidebarTaxonomyCore.initialize(this, config));
     this.bindEvents();
     this.renderProjects();
     this.renderTags();
@@ -33,10 +34,10 @@ const SidebarCore = {
       item.addEventListener('click', event => this.selectFilter(event.currentTarget));
     });
 
-    this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.bindEvents(this, config));
+    this.taxonomyConfigs.forEach(config => SidebarTaxonomyCore.bindEvents(this, config));
 
     document.addEventListener('click', () => {
-      this.taxonomyConfigs.forEach(config => window.SidebarTaxonomyCore.closeIconPicker(this, config));
+      this.taxonomyConfigs.forEach(config => SidebarTaxonomyCore.closeIconPicker(this, config));
       this.closeSidebarActionMenus();
     });
     document.addEventListener('keydown', event => {
