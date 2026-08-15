@@ -1,14 +1,6 @@
 window.ScheduleRepeatEndMethods = {
   initRepeatEndUi() {
     if (this.repeatEndsRow) return;
-    if (!document.querySelector('link[data-repeat-end-style]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'css/components/schedule-repeat-end.css';
-      link.dataset.repeatEndStyle = 'true';
-      document.head.appendChild(link);
-    }
-
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'repeat-ends-row';

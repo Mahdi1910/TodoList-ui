@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="css/components/schedule-wheels.css">
   <link rel="stylesheet" href="css/components/schedule-reminders.css">
   <link rel="stylesheet" href="css/components/schedule-repeat.css">
+  <link rel="stylesheet" href="css/components/schedule-repeat-end.css">
 </head>
 <body>
 
@@ -149,28 +150,51 @@
           <div class="workspace-menu-wrap">
             <button type="button" class="workspace-control-btn" id="btn-workspace-menu" aria-haspopup="menu" aria-expanded="false" aria-label="View and sort options">•••</button>
             <div class="workspace-menu" id="workspace-menu" role="menu">
-              <div class="workspace-menu-label">Sort</div>
-              <button type="button" data-sort-key="custom" role="menuitemradio" aria-checked="true">Custom</button>
-              <button type="button" data-sort-key="dueDate" role="menuitemradio" aria-checked="false">Due Date</button>
-              <button type="button" data-sort-key="priority" role="menuitemradio" aria-checked="false">Priority</button>
-              <button type="button" data-sort-key="name" role="menuitemradio" aria-checked="false">Name</button>
-              <button type="button" data-sort-key="createdAt" role="menuitemradio" aria-checked="false">Created Date</button>
-              <div class="workspace-menu-divider"></div>
-              <div class="workspace-menu-label">Group By</div>
-              <button type="button" data-group-key="none" role="menuitemradio" aria-checked="true">None</button>
-              <button type="button" data-group-key="priority" role="menuitemradio" aria-checked="false">Priority</button>
-              <button type="button" data-group-key="date" role="menuitemradio" aria-checked="false">Date</button>
-              <button type="button" data-group-key="project" role="menuitemradio" aria-checked="false">Project</button>
-              <button type="button" data-group-key="tag" role="menuitemradio" aria-checked="false">Tag</button>
-              <div class="workspace-menu-divider"></div>
               <div class="workspace-menu-label">View</div>
-              <button type="button" class="selected" data-view-type="list" role="menuitemradio" aria-checked="true">List</button>
-              <button type="button" data-view-type="kanban" role="menuitemradio" aria-checked="false">Kanban</button>
-              <button type="button" disabled aria-disabled="true">Timeline</button>
+              <div class="workspace-view-switcher" role="group" aria-label="Task view">
+                <button type="button" data-view-type="list" role="radio" aria-checked="true" aria-label="List view" title="List view">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+                <button type="button" data-view-type="kanban" role="radio" aria-checked="false" aria-label="Kanban view" title="Kanban view">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="5" width="5" height="14" rx="1"/><rect x="11" y="5" width="4" height="9" rx="1"/><rect x="17" y="5" width="3" height="11" rx="1"/></svg>
+                </button>
+                <button type="button" data-view-type="timeline" disabled aria-disabled="true" aria-label="Timeline view unavailable" title="Timeline view — unavailable">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M5 7h14M5 12h9M5 17h12" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+                </button>
+              </div>
+              <div class="workspace-menu-divider"></div>
+              <button type="button" class="workspace-submenu-trigger" id="workspace-sort-group-trigger" aria-haspopup="dialog" aria-controls="workspace-sort-group-panel" aria-expanded="false">
+                <span class="workspace-menu-primary">Sort &amp; Group</span>
+                <span class="workspace-menu-chevron" aria-hidden="true">›</span>
+              </button>
             </div>
           </div>
         </div>
       </header>
+
+      <div id="workspace-sort-group-panel" class="workspace-settings-panel" role="dialog" aria-label="Sort and group settings" aria-hidden="true">
+        <section class="workspace-settings-section" aria-labelledby="workspace-sort-label">
+          <div class="workspace-settings-label" id="workspace-sort-label">Sort</div>
+          <div class="workspace-option-chips" role="radiogroup" aria-label="Sort tasks">
+            <button type="button" class="workspace-option-chip" data-sort-key="custom" role="radio" aria-checked="false">Custom</button>
+            <button type="button" class="workspace-option-chip" data-sort-key="dueDate" role="radio" aria-checked="false">Due Date</button>
+            <button type="button" class="workspace-option-chip" data-sort-key="priority" role="radio" aria-checked="false">Priority</button>
+            <button type="button" class="workspace-option-chip" data-sort-key="name" role="radio" aria-checked="false">Name</button>
+            <button type="button" class="workspace-option-chip" data-sort-key="createdAt" role="radio" aria-checked="false">Created Date</button>
+          </div>
+        </section>
+        <div class="workspace-settings-divider"></div>
+        <section class="workspace-settings-section" aria-labelledby="workspace-group-label">
+          <div class="workspace-settings-label" id="workspace-group-label">Group</div>
+          <div class="workspace-option-chips" role="radiogroup" aria-label="Group tasks">
+            <button type="button" class="workspace-option-chip" data-group-key="none" role="radio" aria-checked="false">None</button>
+            <button type="button" class="workspace-option-chip" data-group-key="priority" role="radio" aria-checked="false">Priority</button>
+            <button type="button" class="workspace-option-chip" data-group-key="date" role="radio" aria-checked="false">Date</button>
+            <button type="button" class="workspace-option-chip" data-group-key="project" role="radio" aria-checked="false">Project</button>
+            <button type="button" class="workspace-option-chip" data-group-key="tag" role="radio" aria-checked="false">Tag</button>
+          </div>
+        </section>
+      </div>
 
       <!-- Task Containers Workspace -->
       <div class="workspace-content">
@@ -196,10 +220,13 @@
 
         <!-- Container 2: Completed Tasks (Available ONLY when completed tasks exist) -->
         <section class="tasks-section completed-section" id="completed-tasks-container">
-          <div class="section-header-title">
+          <button type="button" class="section-header-title completed-section-toggle" aria-controls="completed-task-list" aria-expanded="true" aria-label="Collapse completed tasks">
             <span>Completed</span>
-            <span id="completed-tasks-count">0 tasks</span>
-          </div>
+            <span class="completed-section-toggle-meta">
+              <span id="completed-tasks-count">0 tasks</span>
+              <span class="completed-section-chevron" aria-hidden="true">▾</span>
+            </span>
+          </button>
 
           <div class="task-list" id="completed-task-list">
             <!-- Rendered dynamically by tasks.js -->
@@ -264,6 +291,8 @@
 
   <div class="task-action-menu" id="task-action-menu" role="menu" aria-label="Task actions" hidden>
     <button type="button" data-task-action="add-subtask" role="menuitem">Add Subtask</button>
+    <button type="button" data-task-action="link-parent" role="menuitem" aria-haspopup="menu" aria-expanded="false">Link to Parent</button>
+    <button type="button" data-task-action="unlink" role="menuitem">Unlink</button>
     <button type="button" data-task-action="delete" role="menuitem">Delete</button>
   </div>
 
@@ -320,10 +349,7 @@
               <button type="button" class="toolbar-icon-btn" id="btn-pop-project" title="Select Project">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002-2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               </button>
-              <div class="context-menu" id="menu-project">
-                <div class="context-menu-item selected" data-project="personal"><span class="project-dot" style="background-color: var(--accent-color);"></span> Personal</div>
-                <div class="context-menu-item" data-project="work"><span class="project-dot" style="background-color: var(--purple-color);"></span> Work</div>
-              </div>
+              <div class="context-menu" id="menu-project"></div>
             </div>
             <button type="button" class="toolbar-icon-btn add-subtask-toolbar-btn" id="btn-add-subtask-from-editor" title="Add Subtask" aria-label="Add Subtask" hidden>+</button>
           </div>
@@ -752,13 +778,13 @@
         <div class="project-view-field">
           <span class="project-name-label">View type</span>
           <div class="project-view-options" role="radiogroup" aria-label="Project view type">
-            <button type="button" class="project-view-option selected" data-view="list" role="radio" aria-checked="true" title="List">
+            <button type="button" class="project-view-option selected" data-taxonomy-view="list" role="radio" aria-checked="true" title="List">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>List</span>
             </button>
-            <button type="button" class="project-view-option" data-view="kanban" role="radio" aria-checked="false" title="Kanban">
+            <button type="button" class="project-view-option" data-taxonomy-view="kanban" role="radio" aria-checked="false" title="Kanban">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg><span>Kanban</span>
             </button>
-            <button type="button" class="project-view-option" data-view="timeline" role="radio" aria-checked="false" title="Timeline" disabled aria-disabled="true">
+            <button type="button" class="project-view-option" data-taxonomy-view="timeline" role="radio" aria-checked="false" title="Timeline" disabled aria-disabled="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 18V6M4 12h16M20 6v12M8 9v6M12 7v10M16 9v6"/></svg><span>Timeline</span>
             </button>
           </div>
@@ -804,13 +830,13 @@
         <div class="project-view-field">
           <span class="project-name-label">View type</span>
           <div class="project-view-options" role="radiogroup" aria-label="Tag view type">
-            <button type="button" class="project-view-option selected" data-tag-view="list" role="radio" aria-checked="true" title="List">
+            <button type="button" class="project-view-option selected" data-taxonomy-view="list" role="radio" aria-checked="true" title="List">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>List</span>
             </button>
-            <button type="button" class="project-view-option" data-tag-view="kanban" role="radio" aria-checked="false" title="Kanban">
+            <button type="button" class="project-view-option" data-taxonomy-view="kanban" role="radio" aria-checked="false" title="Kanban">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg><span>Kanban</span>
             </button>
-            <button type="button" class="project-view-option" data-tag-view="timeline" role="radio" aria-checked="false" title="Timeline" disabled aria-disabled="true">
+            <button type="button" class="project-view-option" data-taxonomy-view="timeline" role="radio" aria-checked="false" title="Timeline" disabled aria-disabled="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 18V6M4 12h16M20 6v12M8 9v6M12 7v10M16 9v6"/></svg><span>Timeline</span>
             </button>
           </div>
@@ -849,6 +875,28 @@
         </label>
       </div>
 
+      <section id="settings-data-section" class="settings-section settings-data-section" aria-labelledby="settings-data-title">
+        <div class="settings-section-copy">
+          <span class="settings-section-title" id="settings-data-title">Data</span>
+          <span class="settings-data-note">Backup all saved tasks, projects, tags, reminders, repeat data and preferences.</span>
+        </div>
+        <div class="settings-data-actions">
+          <button type="button" class="btn-secondary" id="btn-create-backup">Create Backup</button>
+          <button type="button" class="btn-secondary" id="btn-restore-backup">Restore Backup</button>
+          <input class="sr-only" type="file" id="restore-backup-input" accept="application/json,.json" tabindex="-1">
+        </div>
+        <p class="backup-restore-status" id="backup-restore-status" role="status" aria-live="polite"></p>
+        <div class="restore-summary" id="restore-backup-summary" hidden tabindex="-1">
+          <strong>Backup ready to restore</strong>
+          <span id="restore-backup-details"></span>
+          <span class="restore-warning">This replaces all current local TodoList data.</span>
+          <div class="restore-confirm-actions">
+            <button type="button" class="btn-secondary" id="btn-cancel-restore">Cancel</button>
+            <button type="button" class="btn-danger" id="btn-confirm-restore">Restore and Replace</button>
+          </div>
+        </div>
+      </section>
+
       <div class="modal-footer">
         <button type="button" class="btn-primary" id="btn-save-settings">Done</button>
       </div>
@@ -860,6 +908,7 @@
   <script src="js/task-relations.js"></script>
   <script src="js/task-order.js"></script>
   <script src="js/theme.js"></script>
+  <script src="js/components/sidebar-taxonomy-core.js"></script>
   <script src="js/components/sidebar-projects.js"></script>
   <script src="js/components/sidebar-tags.js"></script>
   <script src="js/components/sidebar.js"></script>
