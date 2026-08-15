@@ -92,7 +92,7 @@ This file is the permanent cleanup/problem tracker for the application.
 
 # Priority 3 — Accessibility / interaction quality
 
-- [ ] **15. Fix hidden-sidebar focus handling.**
+- [x] **15. Fix hidden-sidebar focus handling.**
   - The sidebar can receive `aria-hidden="true"` while focus is still inside a sidebar control.
   - Apply the same general focus/inert principles used for dialogs.
 
@@ -100,7 +100,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - Static sidebar filters are buttons, but generated Project/Tag rows are clickable divs.
   - Use semantic buttons or provide complete keyboard/focus behavior.
 
-- [ ] **17. Remove mobile pinch-zoom blocking.**
+- [x] **17. Remove mobile pinch-zoom blocking.**
   - The viewport currently uses `maximum-scale=1.0` and `user-scalable=no`.
   - Remove those restrictions unless there is a very strong UI reason to keep them.
 
@@ -116,7 +116,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - `getFilteredTasks()` currently calls `normalizeAllTasks()`, recreating/replacing task objects during a read operation.
   - A selector should not mutate or rebuild application state.
 
-- [ ] **20. Remove render-time mutation of Repeat data.**
+- [x] **20. Remove render-time mutation of Repeat data.**
   - Repeat label formatting sorts `custom.weekdays` in place.
   - Rendering should never mutate stored state; sort a copied array instead.
 
@@ -125,7 +125,7 @@ This file is the permanent cleanup/problem tracker for the application.
   - This is acceptable for current personal-use scale, so it is low priority.
   - Improve only after correctness/architecture cleanup.
 
-- [ ] **22. Remove duplicated date-label formatting logic.**
+- [x] **22. Remove duplicated date-label formatting logic.**
   - Today/Tomorrow/date formatting exists in more than one Task renderer method.
   - Use one small shared formatting helper.
 
