@@ -14,25 +14,25 @@ This file is the permanent cleanup/problem tracker for the application.
 
 # Priority 1 — Real behavior / correctness problems
 
-- [ ] **1. Fix task-family filtering.**
+- [x] **1. Fix task-family filtering.**
   - Current filtering works on individual tasks, but List/Kanban rendering later keeps only roots and then reloads all children from global state.
   - This can hide a matching subtask when its parent does not match the filter.
   - It can also show subtasks that do not match a filter when their parent does match.
   - Define one clear family-aware filtering rule and use it in both List and Kanban.
 
-- [ ] **2. Fix modal focus and `aria-hidden` lifecycle everywhere.**
+- [x] **2. Fix modal focus and `aria-hidden` lifecycle everywhere.**
   - Current dialogs can be hidden while keyboard focus is still inside them.
   - This produces the browser warning: `Blocked aria-hidden on an element because its descendant retained focus`.
   - Affects Project, Tag, Task, Subtask, Schedule, Settings, Custom Reminder, Custom Repeat, and Repeat Ends flows.
   - Use one shared focus lifecycle with focus restoration and `inert` for hidden dialogs.
   - Related plan: `implementation plan/Implementation Plan ID 13.md`.
 
-- [ ] **3. Fix unsafe HTML building in Task Project/Tag menus.**
+- [x] **3. Fix unsafe HTML building in Task Project/Tag menus.**
   - Some menu rendering uses `innerHTML` with a helper named `escapeText()` that does not actually HTML-escape its value.
   - Prefer DOM creation + `textContent` for user-controlled Project/Tag names and icons.
   - Related plan: `implementation plan/Implementation Plan ID 16.md`.
 
-- [ ] **4. Fix Subtask Tag menu ordering.**
+- [x] **4. Fix Subtask Tag menu ordering.**
   - The main Task editor uses the new taxonomy ordering system.
   - The Subtask editor still walks `AppState.tags` directly, so reordered Tags can appear in the old order there.
   - Use `TaxonomyOrder.getChildren()` / the same ordering source used by the main Task editor.
@@ -46,45 +46,45 @@ This file is the permanent cleanup/problem tracker for the application.
 
 # Priority 2 — Architecture / maintainability problems
 
-- [ ] **6. Remove `ui-persistence-bindings.js` as a large runtime patch layer.**
+- [x] **6. Remove `ui-persistence-bindings.js` as a large runtime patch layer.**
   - It replaces methods belonging to Tasks, Subtasks, Projects, Tags, Workspace Controls, drag, and reminders after components are already defined.
   - Move persistent behavior into the real owning component/service so every action has one clear implementation.
   - Goal: UI -> AppDataService -> IndexedDB -> AppState -> render.
 
-- [ ] **7. Remove Repeat mapper/service monkey-patching.**
+- [x] **7. Remove Repeat mapper/service monkey-patching.**
   - `repeat-storage.js` replaces mapper and AppDataService methods at runtime.
   - `data-service-repeat.js` also replaces task-completion behavior.
   - Make the Repeat-aware implementation explicit instead of decorating/replacing existing methods after load.
 
-- [ ] **8. Reduce AppState responsibilities.**
+- [x] **8. Reduce AppState responsibilities.**
   - `state.js` currently mixes seed data, normalization, task/project/tag CRUD, filtering, counts, hierarchy helpers, navigation state, and more.
   - Keep AppState primarily as the hydrated read model + selectors.
   - Keep mutations in AppDataService and hierarchy/order logic in their dedicated modules.
 
-- [ ] **9. Merge duplicated Project and Tag sidebar/modal logic.**
+- [x] **9. Merge duplicated Project and Tag sidebar/modal logic.**
   - `sidebar-projects.js` and `sidebar-tags.js` are mostly mirror implementations.
   - Build a shared taxonomy UI helper/component configured for `project` or `tag`.
   - This reduces the chance of fixing one side but forgetting the other.
 
-- [ ] **10. Remove UI-component dependency from the data layer.**
+- [x] **10. Remove UI-component dependency from the data layer.**
   - AppDataService currently reaches into `ScheduleComponent.customReminders`.
   - Persistence hydration also writes reminder data directly into ScheduleComponent.
   - Reminder definitions should live in state/service data; Schedule should read them from there.
 
-- [ ] **11. Simplify JavaScript module loading / bootstrap order.**
+- [x] **11. Simplify JavaScript module loading / bootstrap order.**
   - The app loads many scripts statically and then loads another ordered list dynamically in `app.js`.
   - Sequential dynamic loading makes startup depend heavily on exact script order.
   - Prefer a clearer explicit module system (native ES modules is enough; no framework required).
 
-- [ ] **12. Improve bootstrap error reporting.**
+- [x] **12. Improve bootstrap error reporting.**
   - A missing JS module/integration failure can currently end up showing a message that says local storage could not be opened.
   - Separate module-load, integration, database-open, hydration, and repair errors so debugging is accurate.
 
-- [ ] **13. Remove dead/duplicate HTML that JavaScript immediately replaces.**
+- [x] **13. Remove dead/duplicate HTML that JavaScript immediately replaces.**
   - Some menus are fully written in `index.html` and then rebuilt with JavaScript.
   - Keep one source of truth for each UI structure.
 
-- [ ] **14. Stop runtime-upgrading permanent markup when static HTML can be correct from the start.**
+- [x] **14. Stop runtime-upgrading permanent markup when static HTML can be correct from the start.**
   - Example: the Completed header starts as a div and JavaScript later replaces it with a button.
   - Permanent controls should preferably be correct semantic elements in `index.html` from first paint.
 
@@ -112,7 +112,7 @@ This file is the permanent cleanup/problem tracker for the application.
 
 # Priority 4 — Performance / hidden side effects
 
-- [ ] **19. Make filtering/selectors read-only.**
+- [x] **19. Make filtering/selectors read-only.**
   - `getFilteredTasks()` currently calls `normalizeAllTasks()`, recreating/replacing task objects during a read operation.
   - A selector should not mutate or rebuild application state.
 
@@ -137,7 +137,7 @@ This file is the permanent cleanup/problem tracker for the application.
 
 # Priority 5 — Safety / testing / cleanup
 
-- [ ] **24. Add JSON Export / Import backup.**
+- [x] **24. Add JSON Export / Import backup.**
   - The IndexedDB design is good, but the data is still browser-local.
   - Add a simple full-data backup/export and validated transactional restore/import.
   - This is important for a personal application because clearing browser/site data could otherwise lose everything.
